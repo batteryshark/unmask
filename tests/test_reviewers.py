@@ -99,6 +99,44 @@ def test_review_assessment_adjudicates_and_persists(tmp_path):
     led.close()
 
 
+def test_mcd_run_review_attaches_adjudication(tmp_path):
+    """`mcd run --review` (via run_mcd with an injected model) folds the reviewed
+    disposition into the report and persists judgments to the ledger."""
+    import json
+    from pathlib import Path
+
+    from unmask import MCDConfig, run_mcd
+    from unmask.ledger import LedgerStore
+
+    fx = str(Path(__file__).resolve().parents[1] / "tests" / "fixtures" / "evil-npm")
+    result = run_mcd(fx, MCDConfig(storage_root=str(tmp_path / ".mcd"), review=True),
+                     review_model=TestModel())
+    assert result.status == "completed"
+
+    report = json.loads(Path(result.report_paths["json"]).read_text())
+    assert "adjudication" in report
+    assert report["adjudication"]["reviewedDisposition"]["recommendation"] in {"clear", "review", "quarantine"}
+    assert report["adjudication"]["engineDisposition"] == "quarantine"
+
+    led = LedgerStore(Path(result.run_dir) / "run.db")
+    assert led.count_judgments(result.run_id) == 4
+    led.close()
+
+    assert "Reviewed:" in Path(result.report_paths["html"]).read_text()
+
+
+def test_mcd_run_without_review_has_no_adjudication(tmp_path):
+    import json
+    from pathlib import Path
+
+    from unmask import MCDConfig, run_mcd
+
+    fx = str(Path(__file__).resolve().parents[1] / "tests" / "fixtures" / "evil-npm")
+    result = run_mcd(fx, MCDConfig(storage_root=str(tmp_path / ".mcd")))  # review off (default)
+    report = json.loads(Path(result.report_paths["json"]).read_text())
+    assert "adjudication" not in report
+
+
 @pytest.mark.skipif(os.environ.get("UNMASK_REVIEW_LIVE") != "1",
                     reason="live review; set UNMASK_REVIEW_LIVE=1 and UNMASK_REVIEW_* to run")
 def test_live_review_smoke():

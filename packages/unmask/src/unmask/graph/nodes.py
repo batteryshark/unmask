@@ -139,6 +139,43 @@ class ScanAndCompose(Node):
         d.ledger.event(s.run_id, "ScanAndCompose", "note",
                        {"observations": len(result.observations),
                         "findings": len(result.findings)})
+        return ReviewFindings()
+
+
+class ReviewFindings(Node):
+    """Optional agentic adjudication. A reviewer reads each finding's evidence and
+    the overlay recomputes a *reviewed* disposition (the model judges; the rule,
+    not the model, sets disposition). Off unless config.review; a missing or failed
+    model is an honest coverage note, never a hard stop. Judgments persist."""
+
+    def run(self, ctx: GraphContext) -> Node:
+        d, s = ctx.deps, ctx.state
+        scan = d.scratch.get("scan")
+        if not d.config.review or scan is None or not scan.findings:
+            return CoverageGate()
+        try:
+            from unmask.reviewers import ReviewModelConfig, review_assessment
+            model = d.review_model or ReviewModelConfig.from_env().build_model()
+        except Exception as exc:
+            d.ledger.event(s.run_id, "ReviewFindings", "note", {"skipped": repr(exc)})
+            d.scratch["review_note"] = (
+                "Agentic review was requested but no model is configured — install "
+                f"unmask[review] and set UNMASK_REVIEW_* ({exc!r}).")
+            return CoverageGate()
+
+        assessment = scan.assessment
+        reviews, overlay = review_assessment(assessment, model=model)
+        model_name = getattr(d.config, "model", None) or type(model).__name__
+        for r in reviews:
+            d.ledger.record_judgment(s.run_id, r, model=model_name)
+        if overlay:
+            assessment["adjudication"] = overlay
+            from unmask.scanner.assess.render import render_html, render_json, render_markdown
+            scan.rendered = {"html": render_html(assessment), "md": render_markdown(assessment),
+                             "json": render_json(assessment)}
+        d.ledger.event(s.run_id, "ReviewFindings", "note",
+                       {"reviewed": len(reviews),
+                        "reviewedDisposition": ((overlay or {}).get("reviewedDisposition") or {}).get("recommendation")})
         return CoverageGate()
 
 

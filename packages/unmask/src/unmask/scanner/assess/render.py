@@ -120,6 +120,23 @@ def render_markdown(assessment: dict) -> str:
             out.append(f"- {c.get('narrative')}")
         out.append("")
 
+    adj = assessment.get("adjudication")
+    if adj:
+        rd = adj.get("reviewedDisposition") or {}
+        out.append("## Agentic review")
+        out.append("")
+        line = f"**Reviewed disposition:** {rd.get('recommendation', '?').upper()}"
+        if adj.get("dispositionChanged") and adj.get("engineDisposition"):
+            line += f" (engine: {adj['engineDisposition'].upper()})"
+        out.append(line)
+        if rd.get("rationale"):
+            out += ["", rd["rationale"]]
+        out.append("")
+        for r in adj.get("reviews", []):
+            out.append(f"- **{r.get('finding_id')}** — {r.get('verdict')} "
+                       f"(conf {r.get('reviewed_confidence')}): {r.get('justification')}")
+        out.append("")
+
     cov = assessment.get("coverage") or {}
     out.append("## Coverage")
     out.append("")
@@ -419,6 +436,38 @@ def _finding_card(f: dict, obs_by_id: dict) -> str:
     return "".join(parts)
 
 
+def _adjudication_html(adj: dict) -> str:
+    """The agentic-review overlay: the reviewed disposition + per-finding verdicts,
+    shown next to the engine disposition."""
+    rd = adj.get("reviewedDisposition") or {}
+    rec = rd.get("recommendation", "unknown")
+    cls = {"quarantine": "q", "review": "r", "clear": "c"}.get(rec, "r")
+    p = [f"<section class='banner {cls}' role='region' aria-label='Agentic review'>",
+         "<div class='verdict'><span class='dot' aria-hidden='true'></span>"
+         f"<h1 style='font-size:20px'>Reviewed: {_esc(rec).upper()}</h1></div>"]
+    if adj.get("dispositionChanged") and adj.get("engineDisposition"):
+        p.append(f"<p class='rationale'>Review changed the disposition from "
+                 f"<strong>{_esc(adj['engineDisposition']).upper()}</strong> to "
+                 f"<strong>{_esc(rec).upper()}</strong>.</p>")
+    if rd.get("rationale"):
+        p.append(f"<p class='rationale'>{_esc(rd['rationale'])}</p>")
+    counts = adj.get("counts") or {}
+    if counts:
+        p.append("<div class='chips' style='margin-top:8px'>"
+                 + "".join(f"<span class='chip'>{_esc(k)}: {_esc(v)}</span>" for k, v in counts.items())
+                 + "</div>")
+    reviews = adj.get("reviews") or []
+    if reviews:
+        p.append("<ul class='drivers'>" + "".join(
+            f"<li><strong>{_esc(r.get('finding_id'))}</strong> — {_esc(r.get('verdict'))} "
+            f"(conf {_esc(r.get('reviewed_confidence'))}): {_esc(r.get('justification'))}</li>"
+            for r in reviews) + "</ul>")
+    p.append("<p class='blurb'>The engine found the shapes; a reviewer read the evidence behind "
+             "each. The reviewed disposition is recomputed by rule from the verdicts, not set by "
+             "the model.</p></section>")
+    return "".join(p)
+
+
 def render_html(assessment: dict) -> str:
     disp = assessment.get("disposition") or {}
     rec = disp.get("recommendation", "unknown")
@@ -453,6 +502,10 @@ def render_html(assessment: dict) -> str:
         p.append("<ul class='drivers'>"
                  + "".join(f"<li>{_esc(d)}</li>" for d in disp["drivers"]) + "</ul>")
     p.append("</section>")
+
+    # Agentic-review overlay (present only when the run was adjudicated)
+    if assessment.get("adjudication"):
+        p.append(_adjudication_html(assessment["adjudication"]))
 
     # Two-axis summary strip (severity and confidence kept visibly independent)
     hi_sev = summ.get("highestSeverity")

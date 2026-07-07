@@ -31,6 +31,9 @@ class MCDGraphDeps:
     config: MCDConfig
     paths: RunPaths
     toolchain: ToolchainStatus
+    # Optional injected pydantic-ai model for agentic review (tests pass TestModel;
+    # None resolves from UNMASK_REVIEW_* at review time).
+    review_model: Any = None
     scratch: dict[str, Any] = field(default_factory=dict)
 
 

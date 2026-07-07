@@ -23,6 +23,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
         sandbox=args.sandbox,
         network=args.network,
         tool_profile=args.tool_profile,
+        review=args.review,
     )
     result = run_mcd(args.target, config)
 
@@ -133,6 +134,8 @@ def build_parser() -> argparse.ArgumentParser:
                      choices=["offline", "registry", "fetch-only", "dynamic"])
     run.add_argument("--tool-profile", default="static",
                      choices=["static", "source", "binary", "full"])
+    run.add_argument("--review", action="store_true",
+                     help="agentic adjudication of findings (needs unmask[review] + UNMASK_REVIEW_*)")
     run.add_argument("--json", action="store_true")
     run.set_defaults(func=_cmd_run)
 

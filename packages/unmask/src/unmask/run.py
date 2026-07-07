@@ -28,7 +28,7 @@ class RunResult:
     report_paths: dict
 
 
-def run_mcd(target: str, config: MCDConfig | None = None) -> RunResult:
+def run_mcd(target: str, config: MCDConfig | None = None, *, review_model=None) -> RunResult:
     config = config or MCDConfig()
     target_path = Path(target).resolve()
     if not target_path.exists():
@@ -51,7 +51,8 @@ def run_mcd(target: str, config: MCDConfig | None = None) -> RunResult:
         db_path=paths.db_path, target_path=target_path,
         max_iterations=config.max_iterations,
     )
-    deps = MCDGraphDeps(ledger=ledger, config=config, paths=paths, toolchain=toolchain)
+    deps = MCDGraphDeps(ledger=ledger, config=config, paths=paths, toolchain=toolchain,
+                        review_model=review_model)
     ctx = GraphContext(state=state, deps=deps)
     try:
         result = run_graph(InitializeRun(), ctx)
