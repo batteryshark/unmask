@@ -165,6 +165,7 @@ class ReviewFindings(Node):
 
         assessment = scan.assessment
         reviews, overlay = review_assessment(assessment, model=model)
+        d.scratch["reviews"] = reviews  # for post-report rule-tuning QA
         model_name = getattr(d.config, "model", None) or type(model).__name__
         for r in reviews:
             d.ledger.record_judgment(s.run_id, r, model=model_name)
@@ -248,6 +249,11 @@ class RenderReport(Node):
             if fp.is_file():
                 d.ledger.add_report(s.run_id, fmt, str(fp))
 
+        # Post-report rule-tuning QA — advisory engineering feedback, only when the
+        # findings were reviewed (it clusters what review knocked down).
+        if scan is not None and d.config.post_report_qa != "off" and d.scratch.get("reviews"):
+            _post_report_qa(ctx, scan.assessment, d.scratch["reviews"], reports_dir)
+
         status = "completed" if scan is not None else "partial"
         summary = {"disposition": disposition, "findingCount": finding_count,
                    "blockedBinaries": blocked_binaries}
@@ -284,6 +290,48 @@ def _fail_op(ctx: GraphContext, operation: str, error: str) -> None:
     wid = _work_id_for_op(ctx, operation)
     if wid:
         ctx.deps.ledger.set_work_status(wid, "failed", error=error)
+
+
+def _post_report_qa(ctx: GraphContext, assessment: dict, reviews, reports_dir) -> None:
+    d, s = ctx.deps, ctx.state
+    try:
+        from unmask.qa import suggest_rule_tunings
+        suggestions = suggest_rule_tunings(assessment, reviews, model=d.review_model)
+    except Exception as exc:  # QA is advisory; never fail the run
+        d.ledger.event(s.run_id, "PostReportQA", "note", {"error": repr(exc)})
+        return
+    _atomic_write(reports_dir / "qa.json", json.dumps({
+        "kind": "rule-tuning-qa",
+        "note": "Advisory engineering feedback on rule quality — NOT part of the target's "
+                "disposition. Nothing here changes findings, rules, or taxonomy.",
+        "suggestions": [x.model_dump() for x in suggestions],
+    }, indent=2))
+    _atomic_write(reports_dir / "qa.md", _qa_markdown(suggestions))
+    for x in suggestions:
+        d.ledger.record_qa_suggestion(s.run_id, x)
+    d.ledger.add_report(s.run_id, "qa-json", str(reports_dir / "qa.json"))
+    d.ledger.event(s.run_id, "PostReportQA", "note", {"suggestions": len(suggestions)})
+
+
+def _qa_markdown(suggestions) -> str:
+    lines = ["# Rule-tuning candidates (engineering feedback)", "",
+             "_Advisory only — feedback for maintaining rule quality, not part of the target "
+             "assessment. Nothing here changes findings, rules, or taxonomy._", ""]
+    if not suggestions:
+        lines += ["No rule-tuning candidates: the knocked-down findings did not cluster into a "
+                  "repeated over-permissive shape.", ""]
+        return "\n".join(lines)
+    for x in suggestions:
+        lines += [f"## {x.kind}",
+                  f"- **Findings:** {', '.join(x.finding_ids)}"]
+        if x.rule_ids:
+            lines.append(f"- **Rules:** {', '.join(x.rule_ids)}")
+        lines += [f"- **Suggestion:** {x.suggestion}",
+                  f"- **Rationale:** {x.rationale}"]
+        if x.estimated_noise_reduction:
+            lines.append(f"- **Estimated noise reduction:** {x.estimated_noise_reduction}")
+        lines += [f"- ⚠️ **False-negative risk:** {x.risk}", ""]
+    return "\n".join(lines)
 
 
 def _write_run_json(ctx: GraphContext, *, status: str, disposition: str | None = None) -> None:

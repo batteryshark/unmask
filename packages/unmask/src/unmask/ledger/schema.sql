@@ -125,6 +125,20 @@ create table if not exists judgments (
 );
 create index if not exists idx_judgments_run on judgments(run_id);
 
+create table if not exists qa_suggestions (
+    id                        text primary key,
+    run_id                    text not null,
+    kind                      text not null,       -- raise-threshold|add-attenuator|split-rule|...
+    finding_ids_json          text not null,
+    rule_ids_json             text not null default '[]',
+    suggestion                text not null,
+    rationale                 text not null,
+    risk                      text not null,       -- false-negative risk of applying it
+    estimated_noise_reduction text,
+    created_at                text not null
+);
+create index if not exists idx_qa_run on qa_suggestions(run_id);
+
 create table if not exists graph_events (
     id           text primary key,
     run_id       text not null,

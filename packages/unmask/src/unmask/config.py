@@ -37,6 +37,8 @@ class MCDConfig:
     # Agentic adjudication overlay (requires unmask[review]); off by default.
     review: bool = False
     model: str | None = None
+    # Post-report rule-tuning QA: off | rules (advisory suggestions).
+    post_report_qa: str = "off"
 
     tree_enabled: bool = True
     tree_max_depth: int = 4

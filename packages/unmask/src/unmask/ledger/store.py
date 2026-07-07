@@ -215,6 +215,25 @@ class LedgerStore:
         cur = self.conn.execute("select count(*) c from judgments where run_id=?", (run_id,))
         return cur.fetchone()["c"]
 
+    # --- qa suggestions (advisory rule tuning) ---------------------------
+    def record_qa_suggestion(self, run_id: str, suggestion) -> str:
+        qid = new_id("qa")
+        self.conn.execute(
+            """insert into qa_suggestions
+               (id, run_id, kind, finding_ids_json, rule_ids_json, suggestion, rationale,
+                risk, estimated_noise_reduction, created_at)
+               values (?,?,?,?,?,?,?,?,?,?)""",
+            (qid, run_id, suggestion.kind, json.dumps(suggestion.finding_ids),
+             json.dumps(suggestion.rule_ids), suggestion.suggestion, suggestion.rationale,
+             suggestion.risk, suggestion.estimated_noise_reduction, _now()),
+        )
+        self.conn.commit()
+        return qid
+
+    def count_qa_suggestions(self, run_id: str) -> int:
+        cur = self.conn.execute("select count(*) c from qa_suggestions where run_id=?", (run_id,))
+        return cur.fetchone()["c"]
+
     # --- events / reports -------------------------------------------------
     def event(self, run_id: str, node: str, event: str, payload: dict | None = None) -> None:
         self.conn.execute(
