@@ -127,6 +127,25 @@ class Signatures:
     def callee_rules(self) -> tuple[MatchRule, ...]:
         return self.packs["callee"].match_rules
 
+    def known_atoms(self) -> frozenset[str]:
+        """Every atom the vendored packs can assign — the canonical vocabulary an
+        RE skill's emitted atoms are validated against before ingestion."""
+        atoms: set[str] = set()
+        for pack in self.packs.values():
+            atoms.update(r.atom for r in pack.match_rules)
+            atoms.update(r.atom for r in pack.content_rules)
+        return frozenset(atoms)
+
+    def known_families(self) -> frozenset[str]:
+        """Atom family prefixes (the part before the dot). Ingestion validates by
+        family, not exact atom, so a skill may emit a newer subtype in a known
+        family (e.g. a future ``XFRM.*``) without core gatekeeping it — but a
+        garbage family is rejected. ``AITM`` is always included: prompt-injection
+        atoms are emitted by the manifest/content passes, not only the packs."""
+        fams = {a.split(".", 1)[0] for a in self.known_atoms()}
+        fams.add("AITM")
+        return frozenset(fams)
+
     def classify_callee(self, callee: str, lang: str) -> Hit | None:
         return _first_match(self.callee_rules, callee, lang)
 

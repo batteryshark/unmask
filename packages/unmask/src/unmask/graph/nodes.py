@@ -28,6 +28,12 @@ from unmask.inventory.tree import BINARY_KINDS, build_tree, classify_kind
 from unmask.ledger.store import stable_key
 from unmask.report.augment import augment_json_report, markdown_coverage_appendix
 from unmask.scanner.native import NativeScanner
+from unmask.transform import ArtifactRef, fold_results, plan_transforms, run_transform_pass
+
+# Bound the reveal→rescan→re-plan fixpoint so a pathological provider (or a
+# decompile that keeps producing new artifacts) can't loop forever.
+_MAX_TRANSFORM_PASSES = 4
+_MAX_TRANSFORMS = 64
 
 _Ctx = GraphRunContext[MCDGraphState, MCDGraphDeps]
 
@@ -82,9 +88,11 @@ class InventoryTarget(BaseNode[MCDGraphState, MCDGraphDeps, dict]):
 
         # Binary artifacts: record them, then decide by the plugin boundary.
         has_re = d.toolchain.has_re
+        binary_artifacts: list[ArtifactRef] = []
         for rel in tree.binary_paths:
             abspath = Path(s.target_path) / rel if Path(s.target_path).is_dir() else Path(s.target_path)
             kind = classify_kind(Path(rel))
+            binary_artifacts.append(ArtifactRef(path=str(abspath), logical_path=rel, kind=kind))
             art_id = d.ledger.add_artifact(
                 run_id=s.run_id, kind=kind if kind in BINARY_KINDS else "native-binary",
                 origin="inventory", path=str(abspath), logical_path=rel,
@@ -114,6 +122,7 @@ class InventoryTarget(BaseNode[MCDGraphState, MCDGraphDeps, dict]):
             target=str(s.target_path), operation="scan-source", category="source",
             title="Native source scan", priority=20,
         )
+        d.scratch["binary_artifacts"] = binary_artifacts
         _mark_op_done(ctx, "inventory")
         d.ledger.event(s.run_id, "InventoryTarget", "note",
                        {"binaryArtifacts": len(tree.binary_paths), "reInstalled": has_re})
@@ -122,41 +131,109 @@ class InventoryTarget(BaseNode[MCDGraphState, MCDGraphDeps, dict]):
 
 @dataclass
 class ScanAndCompose(BaseNode[MCDGraphState, MCDGraphDeps, dict]):
-    async def run(self, ctx: _Ctx) -> "ReviewFindings | CoverageGate":
+    async def run(self, ctx: _Ctx) -> "ProcessTransforms | CoverageGate":
         d, s = ctx.deps, ctx.state
         _enter(ctx, "ScanAndCompose")
         reveal_dir = str(d.paths.run_dir / "revealed")
+        scanner = NativeScanner()
         try:
+            observations, inv = await asyncio.to_thread(
+                partial(scanner.observe, str(s.target_path), reveal_dir=reveal_dir))
             result = await asyncio.to_thread(
-                partial(NativeScanner().scan, str(s.target_path), reveal_dir=reveal_dir))
+                partial(scanner.compose_assess_render, observations, inv, str(s.target_path)))
         except Exception as exc:  # a broken target, not a missing scanner
             _fail_op(ctx, "scan-source", repr(exc))
             d.scratch["scanner_error"] = repr(exc)
             d.ledger.event(s.run_id, "ScanAndCompose", "error", {"error": repr(exc)})
             return CoverageGate()
 
-        for o in result.observations:
-            d.ledger.add_observation(
-                run_id=s.run_id, obs_id=o.get("id"), atom=o.get("atom") or "UNKNOWN",
-                confidence=o.get("confidence", 0.0), method=o.get("method", ""),
-                rule_id=o.get("rule_id"), location=o.get("location"),
-                evidence=o.get("evidence"), relationships=o.get("relationships"),
-            )
-        for f in result.findings:
-            d.ledger.add_finding(
-                run_id=s.run_id, finding_id=f.get("id"), lens=f.get("lens", "mcd"),
-                composition=f.get("_composition"), title=f.get("title", "(untitled)"),
-                claim=f.get("claim", ""), severity=f.get("severity", "info"),
-                confidence=float(f.get("confidence", 0.0) or 0.0),
-                confidence_label=f.get("confidenceLabel"),
-                evidence=f.get("evidence"), disproof=f.get("disproof"),
-                verification=f.get("verification"), response=f.get("response"),
-                amplifiers=f.get("amplifiers"), attenuators=f.get("attenuators"),
-            )
+        _record_scan(ctx, result)
+        # Raw Observation objects + inventory survive so ProcessTransforms can
+        # accumulate transform-derived atoms and re-compose over the union.
         d.scratch["scan"] = result
+        d.scratch["observations_raw"] = observations
+        d.scratch["inv"] = inv
         _mark_op_done(ctx, "scan-source")
         d.ledger.event(s.run_id, "ScanAndCompose", "note",
                        {"observations": len(result.observations),
+                        "findings": len(result.findings)})
+        return ProcessTransforms()
+
+
+@dataclass
+class ProcessTransforms(BaseNode[MCDGraphState, MCDGraphDeps, dict]):
+    """Open up what source can't read — hand obfuscated source and binary artifacts to
+    registered RE providers, rescan whatever they recover, and re-compose over the
+    union. Inert without a provider: binaries stay an honest coverage blind spot.
+
+    The loop is a fixpoint — recovered source may itself carry obfuscation or a nested
+    binary, so each pass re-plans over what the last pass surfaced, bounded by
+    `_MAX_TRANSFORM_PASSES`/`_MAX_TRANSFORMS`."""
+
+    async def run(self, ctx: _Ctx) -> "ReviewFindings":
+        d, s = ctx.deps, ctx.state
+        _enter(ctx, "ProcessTransforms")
+        scan = d.scratch.get("scan")
+        observations = d.scratch.get("observations_raw")
+        inv = d.scratch.get("inv")
+        providers = d.toolchain.transform_providers()
+        if scan is None or observations is None or inv is None or not providers:
+            return ReviewFindings()
+
+        from unmask.scanner.signatures import Signatures
+        sigs = Signatures.load_vendored()
+        known_families = sigs.known_families()
+        caps = d.toolchain.available_capabilities
+        workroot = d.paths.run_dir / "transform"
+        pending_binaries = list(d.scratch.get("binary_artifacts") or [])
+
+        all_obs = list(observations)
+        done: set[str] = set()
+        transformed: list[str] = []
+        dropped: list[dict] = []
+        notes: list[dict] = []
+
+        try:
+            outcome = await asyncio.to_thread(
+                partial(_run_transform_fixpoint, all_obs, inv, pending_binaries,
+                        providers, caps, known_families, sigs, str(workroot),
+                        done, transformed, dropped, notes))
+        except Exception as exc:  # the seam must never fail the run
+            d.ledger.event(s.run_id, "ProcessTransforms", "error", {"error": repr(exc)})
+            return ReviewFindings()
+
+        all_obs = outcome
+        d.scratch["transforms"] = {
+            "providers": [getattr(p, "id", "re-provider") for p in providers],
+            "transformed": transformed, "droppedAtoms": dropped, "notes": notes,
+        }
+
+        if not transformed and not dropped and not notes:
+            d.ledger.event(s.run_id, "ProcessTransforms", "note", {"transformed": 0})
+            return ReviewFindings()
+
+        # Re-number the union and compose once over it, then re-record the ledger.
+        for i, o in enumerate(all_obs, start=1):
+            o.id = f"obs-{i}"
+        result = await asyncio.to_thread(
+            partial(NativeScanner().compose_assess_render, all_obs, inv, str(s.target_path)))
+        d.ledger.reset_observations(s.run_id)
+        d.ledger.reset_findings(s.run_id)
+        _record_scan(ctx, result)
+        d.scratch["scan"] = result
+        d.scratch["observations_raw"] = all_obs
+
+        # Flip each transformed binary's scan-binary work item from blocked/deferred to
+        # done — it was actually opened up this run.
+        for rel in transformed:
+            wid = _work_id_for(ctx, "scan-binary", rel)
+            if wid:
+                d.ledger.set_work_status(wid, "done",
+                    result={"note": "Deep-analysed via RE provider (transform seam)."})
+
+        d.ledger.event(s.run_id, "ProcessTransforms", "note",
+                       {"transformed": len(transformed), "droppedAtoms": len(dropped),
+                        "observations": len(result.observations),
                         "findings": len(result.findings)})
         return ReviewFindings()
 
@@ -240,6 +317,9 @@ class RenderReport(BaseNode[MCDGraphState, MCDGraphDeps, dict]):
             "graph": {"iterations": s.iteration, "stoppedReason":
                       "completed" if scan else "scanner-unavailable"},
         }
+        transforms = d.scratch.get("transforms")
+        if transforms:
+            sections["transforms"] = transforms
 
         reports_dir = d.paths.reports_dir
         reports_dir.mkdir(parents=True, exist_ok=True)
@@ -305,6 +385,7 @@ def build_graph() -> Graph:
         g.node(InitializeRun),
         g.node(InventoryTarget),
         g.node(ScanAndCompose),
+        g.node(ProcessTransforms),
         g.node(ReviewFindings),
         g.node(CoverageGate),
         g.node(RenderReport),
@@ -313,6 +394,78 @@ def build_graph() -> Graph:
 
 
 # --- helpers ---------------------------------------------------------------
+
+def _record_scan(ctx: _Ctx, result) -> None:
+    """Record a scan result's observations + findings into the ledger. Called for the
+    base scan and again (after reset) over the post-transform union."""
+    d, s = ctx.deps, ctx.state
+    for o in result.observations:
+        d.ledger.add_observation(
+            run_id=s.run_id, obs_id=o.get("id"), atom=o.get("atom") or "UNKNOWN",
+            confidence=o.get("confidence", 0.0), method=o.get("method", ""),
+            rule_id=o.get("rule_id"), location=o.get("location"),
+            evidence=o.get("evidence"), relationships=o.get("relationships"),
+        )
+    for f in result.findings:
+        d.ledger.add_finding(
+            run_id=s.run_id, finding_id=f.get("id"), lens=f.get("lens", "mcd"),
+            composition=f.get("_composition"), title=f.get("title", "(untitled)"),
+            claim=f.get("claim", ""), severity=f.get("severity", "info"),
+            confidence=float(f.get("confidence", 0.0) or 0.0),
+            confidence_label=f.get("confidenceLabel"),
+            evidence=f.get("evidence"), disproof=f.get("disproof"),
+            verification=f.get("verification"), response=f.get("response"),
+            amplifiers=f.get("amplifiers"), attenuators=f.get("attenuators"),
+        )
+
+
+def _run_transform_fixpoint(all_obs, inv, pending_binaries, providers, caps,
+                            known_families, sigs, workroot, done, transformed,
+                            dropped, notes) -> list:
+    """The reveal→rescan→re-plan loop (sync; runs in a worker thread). Mutates
+    ``all_obs`` / ``inv`` / the accumulator lists in place and returns ``all_obs``."""
+    total = 0
+    for pass_i in range(_MAX_TRANSFORM_PASSES):
+        requests = plan_transforms(all_obs, inv, binary_artifacts=pending_binaries,
+                                   capabilities=caps, done=done)
+        requests = requests[: max(0, _MAX_TRANSFORMS - total)]
+        if not requests:
+            break
+        for r in requests:
+            done.add(r.artifact.logical_path)
+        total += len(requests)
+
+        pass_dir = os.path.join(workroot, f"pass-{pass_i}")
+        os.makedirs(pass_dir, exist_ok=True)
+        results = run_transform_pass(requests, providers, pass_dir)
+        for res in results:
+            if not res.error:
+                transformed.append(res.artifact)
+        outcome = fold_results(results, sigs=sigs, known_families=known_families, workdir=pass_dir)
+        dropped.extend(outcome.dropped)
+        notes.extend(outcome.notes)
+
+        all_obs.extend(outcome.observations)
+        inv.files.extend(outcome.files)
+        if outcome.dataflow:
+            inv.dataflow = {**(inv.dataflow or {}), **outcome.dataflow}
+
+        # Nested binaries revealed inside recovered source drive the next pass.
+        pending_binaries = [
+            ArtifactRef(path=f.path, logical_path=f.rel, kind=classify_kind(Path(f.path)))
+            for f in outcome.files if classify_kind(Path(f.path)) in BINARY_KINDS
+        ]
+        if not outcome.observations and not pending_binaries:
+            break
+    return all_obs
+
+
+def _work_id_for(ctx: _Ctx, operation: str, target: str) -> str | None:
+    row = ctx.deps.ledger.conn.execute(
+        "select id from work_items where run_id=? and operation=? and target=? "
+        "order by created_at limit 1", (ctx.state.run_id, operation, target)).fetchone()
+    return row["id"] if row else None
+
 
 def _work_id_for_op(ctx: _Ctx, operation: str) -> str | None:
     row = ctx.deps.ledger.conn.execute(

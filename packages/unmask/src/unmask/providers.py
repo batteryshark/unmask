@@ -24,8 +24,15 @@ ENTRY_POINT_GROUP = "unmask.providers"
 # Capabilities the core cares about when deciding whether a binary can be opened up.
 BINARY_CAPABILITIES = {
     "binary-triage", "decompile", "decompile-dex", "decompile-apk",
-    "decompile-jar", "decompile-dotnet", "decompile-native", "sandbox-exec",
-    "emulate",
+    "decompile-jar", "decompile-jvm", "decompile-dotnet", "decompile-native",
+    "decompile-python-bytecode", "decompile-pyc", "sandbox-exec", "emulate",
+}
+
+# Capabilities that let core open an artifact up via the transform seam — the
+# superset that makes the ProcessTransforms fixpoint worth running: recover source
+# (deobfuscate/decompile/unpack) or emit atoms directly.
+TRANSFORM_CAPABILITIES = BINARY_CAPABILITIES | {
+    "deobfuscate", "deobfuscate-js", "unpack-archive", "extract-recursive", "emit-atoms",
 }
 
 
@@ -35,6 +42,7 @@ class ProviderInfo:
     capabilities: list[str] = field(default_factory=list)
     source: str = ""
     error: str | None = None
+    instance: object = field(default=None, repr=False, compare=False)
 
 
 @dataclass
@@ -52,6 +60,27 @@ class ToolchainStatus:
     @property
     def has_re(self) -> bool:
         return bool(self.available_capabilities & BINARY_CAPABILITIES)
+
+    @property
+    def has_transform(self) -> bool:
+        """Any provider can open an artifact up (recover source or emit atoms)."""
+        return bool(self.available_capabilities & TRANSFORM_CAPABILITIES)
+
+    def transform_providers(self) -> list[object]:
+        """Loaded provider instances that can actually open an artifact up — what the
+        ProcessTransforms fixpoint drives. A provider must offer a transform capability
+        AND expose a callable ``transform``; a metadata-only stub (capabilities but no
+        implementation) is excluded, so binaries stay a blind spot rather than
+        generating spurious failure notes. Broken providers (error set) are excluded."""
+        out = []
+        for p in self.providers:
+            if p.error is not None or p.instance is None:
+                continue
+            if not callable(getattr(p.instance, "transform", None)):
+                continue
+            if set(p.capabilities) & TRANSFORM_CAPABILITIES:
+                out.append(p.instance)
+        return out
 
     def to_report(self) -> dict:
         return {
@@ -81,7 +110,8 @@ def discover_providers() -> ToolchainStatus:
             obj = ep.load()
             caps = list(getattr(obj, "capabilities", []) or [])
             pid = getattr(obj, "id", ep.name)
-            status.providers.append(ProviderInfo(id=pid, capabilities=caps, source=ep.value))
+            status.providers.append(
+                ProviderInfo(id=pid, capabilities=caps, source=ep.value, instance=obj))
         except Exception as exc:  # pragma: no cover
             status.providers.append(
                 ProviderInfo(id=ep.name, source=ep.value, error=f"{type(exc).__name__}: {exc}"))

@@ -28,8 +28,18 @@ def _normalize_observation(o) -> dict:
 
 
 class NativeScanner:
-    def scan(self, target: str, *, reveal_dir=None) -> ScanResult:
-        observations, inv = observe(target, reveal_dir=reveal_dir)
+    """The native pipeline, exposed both as one-shot `scan()` and as the two halves
+    the graph drives around the transform fixpoint: `observe()` produces the atom
+    stream, then `compose_assess_render()` runs *once* over the final (post-transform)
+    union so finding ids and evidence links stay consistent."""
+
+    def observe(self, target: str, *, reveal_dir=None, sigs=None):
+        """Observe atoms over the target (+ stdlib container reveal). Returns the raw
+        `(observations, inventory)` so a caller can accumulate transform-derived atoms
+        before composing."""
+        return observe(target, sigs, reveal_dir=reveal_dir)
+
+    def compose_assess_render(self, observations, inv, target: str) -> ScanResult:
         findings = compose_mcd(observations, inv)
         assessment = build_assessment(findings, observations, inv, target)
         rendered = {
@@ -46,3 +56,7 @@ class NativeScanner:
             rendered=rendered,
             scanner_meta={"scanner": "unmask-native", "extractionMode": extraction_mode()},
         )
+
+    def scan(self, target: str, *, reveal_dir=None) -> ScanResult:
+        observations, inv = self.observe(target, reveal_dir=reveal_dir)
+        return self.compose_assess_render(observations, inv, target)

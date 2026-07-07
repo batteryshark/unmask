@@ -194,6 +194,16 @@ class LedgerStore:
         cur = self.conn.execute("select count(*) c from findings where run_id=?", (run_id,))
         return cur.fetchone()["c"]
 
+    def reset_observations(self, run_id: str) -> None:
+        """Drop this run's observations so the post-transform union can be re-recorded
+        without stale rows (finding/observation ids are renumbered over the union)."""
+        self.conn.execute("delete from observations where run_id=?", (run_id,))
+        self.conn.commit()
+
+    def reset_findings(self, run_id: str) -> None:
+        self.conn.execute("delete from findings where run_id=?", (run_id,))
+        self.conn.commit()
+
     # --- judgments (agentic review) --------------------------------------
     def record_judgment(self, run_id: str, review, *, reviewer="agentic", model=None) -> str:
         """Persist a FindingReview as a durable judgment row."""
