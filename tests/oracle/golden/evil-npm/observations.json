@@ -1,0 +1,70 @@
+[
+  {
+    "atom": "PKGM.INSTALL",
+    "confidence": 0.95,
+    "line": null,
+    "method": "static-source",
+    "path": "package.json",
+    "relationships": [
+      {
+        "target": "scripts/postinstall.js",
+        "type": "manifest-entrypoint"
+      }
+    ],
+    "rule_id": "manifest.npm.lifecycle"
+  },
+  {
+    "atom": "ARTF.URL",
+    "confidence": 0.7,
+    "line": null,
+    "method": "static-source",
+    "path": "scripts/postinstall.js",
+    "relationships": [],
+    "rule_id": "regex.ARTF.URL"
+  },
+  {
+    "atom": "LOAD.EVAL",
+    "confidence": 0.59,
+    "line": null,
+    "method": "static-source",
+    "path": "scripts/postinstall.js",
+    "relationships": [],
+    "rule_id": "regex.LOAD.EVAL"
+  },
+  {
+    "atom": "LOAD.MEMCHAIN",
+    "confidence": 0.6,
+    "line": null,
+    "method": "static-source",
+    "path": "scripts/postinstall.js",
+    "relationships": [],
+    "rule_id": "regex.LOAD.MEMCHAIN"
+  },
+  {
+    "atom": "NETW.HTTP",
+    "confidence": 0.56,
+    "line": null,
+    "method": "static-source",
+    "path": "scripts/postinstall.js",
+    "relationships": [],
+    "rule_id": "regex.NETW.HTTP"
+  },
+  {
+    "atom": "XFRM.ENCODE",
+    "confidence": 0.42,
+    "line": null,
+    "method": "static-source",
+    "path": "scripts/postinstall.js",
+    "relationships": [],
+    "rule_id": "regex.XFRM.ENCODE"
+  },
+  {
+    "atom": "XFRM.ENCODE",
+    "confidence": 0.42,
+    "line": null,
+    "method": "static-source",
+    "path": "scripts/postinstall.js",
+    "relationships": [],
+    "rule_id": "regex.XFRM.ENCODE"
+  }
+]

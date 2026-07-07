@@ -1,0 +1,87 @@
+{
+  "schemaVersion": "0.1.0",
+  "taxonomyId": "parallax-taxonomy",
+  "sourceGitCommit": "7daa086c53f9bb0cd2ee7c90c25db1bc961d1bff",
+  "includedRoots": [
+    "signatures",
+    "reference"
+  ],
+  "files": [
+    {
+      "path": "reference/benign-ips.json",
+      "sha256": "bf91db48897e69143f7f757f881cf11060612fa741d8f83fd39271ead638d7eb"
+    },
+    {
+      "path": "reference/binary-magic.json",
+      "sha256": "e980b583abc1244e0a8e4da1afecb0c6be78ad9d3b635534b1a84a3554006065"
+    },
+    {
+      "path": "reference/capability-surfaces.json",
+      "sha256": "546de85b664cf85c1328e2ac31cb9ac94e112c5ad573ad7478c6ec2018e1caeb"
+    },
+    {
+      "path": "reference/dependency-refs.json",
+      "sha256": "88e39053b63447ca2fc60abfc55531447c37eb9a031a2e67a5e5aeda81d41a31"
+    },
+    {
+      "path": "reference/file-classification.json",
+      "sha256": "39df1b842921986dbd8535825a1adaf690eae6aa216170b3f2091fe011703fdf"
+    },
+    {
+      "path": "reference/invisible-codepoints.json",
+      "sha256": "07fd4d1f6593869b30b91cc679d29aeb411966fd7d2a43530087b0bd027d0cfc"
+    },
+    {
+      "path": "reference/packer-signatures.json",
+      "sha256": "cb55c49ac12220011b36479857e48e6f752c59cdaf2e739cce0064495c3c755c"
+    },
+    {
+      "path": "reference/popular-packages.json",
+      "sha256": "300a93dab95a69a08afe557c1b817c96d4ac60b48434b036e49bd814bfad5bdc"
+    },
+    {
+      "path": "reference/standard-libraries.json",
+      "sha256": "23a88a5ae3e3fecb7bb71c9dde8f93b672548e7fb707e20b50b5bb7adc00463c"
+    },
+    {
+      "path": "signatures/README.md",
+      "sha256": "fe3f754d38b7d1492007c53c23026400264790fc8aa634d937c838921a48605f"
+    },
+    {
+      "path": "signatures/examples/core-surfaces.yaml",
+      "sha256": "b2d2b7042afab6806bef77409357a867cd03365746346cff753784df25a5355d"
+    },
+    {
+      "path": "signatures/packs/README.md",
+      "sha256": "d794d4c66e78776c1fdd4978d7238f77a9179a35ad5aa409a7b62a5f323b2bed"
+    },
+    {
+      "path": "signatures/packs/binary-imports.json",
+      "sha256": "89105cbd762a52f6df72ff522cc32e36bd728e32d1e74860d73bc913fa4924f7"
+    },
+    {
+      "path": "signatures/packs/binary-imports.yaml",
+      "sha256": "cf3b49402d9ab419e6871f9036c908300cb45e7b8c9749f420eeb6685d245ae1"
+    },
+    {
+      "path": "signatures/packs/content-surfaces.json",
+      "sha256": "2c355ad0e6dc17d0d41b13c6bc8f717fd3e85cd1311075802e3b056df48273fa"
+    },
+    {
+      "path": "signatures/packs/content-surfaces.yaml",
+      "sha256": "4be43322ff5da941b329dbbd5a2d9de3a21ddd6fba4a377d023f4ff19ede7936"
+    },
+    {
+      "path": "signatures/packs/source-callees.json",
+      "sha256": "f58b7d2bfe9df22fb2703f5a1a3cf07c0d25c2705dbdb260591e1602aa1389c2"
+    },
+    {
+      "path": "signatures/packs/source-callees.yaml",
+      "sha256": "0791e1a412123c9b2e38a1cae364f2146c19881024ba12c047145f8666e9f156"
+    },
+    {
+      "path": "signatures/schema.json",
+      "sha256": "d6e01de0a17a209cd2a0e105229c665a80da4cd1451a6d3742fc870df3274249"
+    }
+  ]
+}

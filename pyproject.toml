@@ -1,0 +1,25 @@
+# uv workspace root for the mcd tool.
+#
+# This repo ships two wheels from one tree:
+#   - unmask       (core: static/source MCD, graph+ledger, report) -> persona 1
+#   - unmask-re    (heavy: binary triage, decompilers, sandbox)    -> persona 2
+#
+# The core discovers RE capabilities at runtime through the `unmask.providers`
+# entry-point group. If unmask-re is not installed, binaries are reported as an
+# honest blind spot instead of being silently skipped.
+[tool.uv.workspace]
+members = ["packages/*"]
+
+[tool.uv.sources]
+unmask = { workspace = true }
+unmask-re = { workspace = true }
+
+# Convenience: `uv sync` at the root brings up the core for development.
+[project]
+name = "mcd-workspace"
+version = "0"
+requires-python = ">=3.11"
+dependencies = ["unmask"]
+
+[dependency-groups]
+dev = ["pytest>=8"]

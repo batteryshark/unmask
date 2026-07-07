@@ -1,0 +1,66 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "unmask"
+version = "0.0.1"
+description = "Malicious Code Detection — is this code doing something malicious, and can you prove it? (core: static/source analysis, graph + ledger, report)"
+readme = "README.md"
+requires-python = ">=3.11"
+license = "Apache-2.0"
+authors = [{ name = "Mario Mercaldi" }]
+keywords = ["security", "malware", "static-analysis", "supply-chain", "mcd"]
+
+# Core stays deliberately light so persona 1 ("I'm about to run this — is it
+# suspicious?") installs fast. No lief/capstone/tree-sitter/decompilers here;
+# those live in the optional `unmask-re` wheel.
+dependencies = [
+    "pydantic>=2.7",
+    "pydantic-graph>=0.0.1",
+]
+
+[project.optional-dependencies]
+# Agentic adjudication overlay (bounded, typed review of findings).
+review = ["pydantic-ai>=0.0.1"]
+
+[project.scripts]
+mcd = "unmask.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/batteryshark/mcd"
+
+# RE providers register themselves under this group; core enumerates it at
+# ResolveToolchain. See unmask/providers.py.
+[project.entry-points."unmask.providers"]
+# (populated by unmask-re when installed)
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/unmask"]
+# The vendored scanner (engine + mcd_lens) and taxonomy carry non-.py data files
+# (JSON/YAML schema + signature packs, the engine's bundled taxonomy fallback,
+# READMEs, the taxonomy manifest). `packages` only grabs .py modules, so include
+# these data files explicitly or the wheel ships an unusable scanner.
+artifacts = [
+    "src/unmask/_vendor/**/*.json",
+    "src/unmask/_vendor/**/*.yaml",
+    "src/unmask/_vendor/**/*.yml",
+    "src/unmask/_vendor/**/*.md",
+    "src/unmask/taxonomy/vendored/**/*.json",
+    "src/unmask/taxonomy/vendored/**/*.yaml",
+    "src/unmask/taxonomy/vendored/**/*.yml",
+    "src/unmask/taxonomy/vendored/**/*.md",
+]
+
+[tool.hatch.build.targets.sdist]
+# Keep sdists self-contained too (tests + vendored data live under the package).
+include = [
+    "src/unmask",
+    "scripts",
+    "tests",
+    "README.md",
+    "pyproject.toml",
+]
+
+[tool.hatch.build.targets.wheel.force-include]
+"src/unmask/ledger/schema.sql" = "unmask/ledger/schema.sql"

@@ -1,0 +1,658 @@
+{
+  "assessment": {
+    "generatedAt": "\u00abts\u00bb",
+    "id": "\u00abid\u00bb",
+    "scanner": "prlx",
+    "scannerVersion": "0.1.0"
+  },
+  "binaries": [],
+  "contract": {
+    "note": "This is a Parallax MCD assessment: a projection of a scan onto the malicious-code question. It recommends a disposition (a next-action), not a maliciousness verdict. Severity (how bad if real) is reported separately from confidence (how sure), and every finding states what would disprove it. The rules own coverage and the mcd lens owns judgment; this view composes them and does not re-analyze."
+  },
+  "correlations": [
+    {
+      "compositions": [
+        "BP-BACKDOOR",
+        "BP-OBFEXEC",
+        "BP-SUPPLY",
+        "BP-TROJAN"
+      ],
+      "corroboration": "2 signal type(s) (package, source) co-located. Co-location across independent signals is corroborating context; it does NOT alter any individual finding's confidence. A disposition may weigh it through an explicit, stated rule.",
+      "crossSignal": true,
+      "disproof": [
+        "The findings sit in the same file but are not actually connected in control or data flow (co-location only); a reachability check that finds no path breaks the link.",
+        "Each member finding's own disproof criteria still apply; disprove the members and the correlation dissolves."
+      ],
+      "evidence": [
+        "obs-1",
+        "obs-3",
+        "obs-4",
+        "obs-2",
+        "obs-5"
+      ],
+      "id": "corr-1",
+      "insights": [
+        "the install step runs obfuscated or decoded code, so the payload executes at install time and resists casual reading"
+      ],
+      "memberFindingIds": [
+        "mcd-1",
+        "mcd-2",
+        "mcd-3",
+        "mcd-4"
+      ],
+      "narrative": "4 malicious-code findings co-occur in `scripts/postinstall.js`: BP-BACKDOOR, BP-OBFEXEC, BP-SUPPLY, BP-TROJAN.",
+      "severity": "critical",
+      "sharedFiles": [
+        "scripts/postinstall.js"
+      ],
+      "sharedIndicators": [],
+      "signalTypes": [
+        "package",
+        "source"
+      ]
+    }
+  ],
+  "coverage": {
+    "lensesRun": [
+      "mcd"
+    ],
+    "notes": [
+      "Observation mode: regex-fallback. AST = tree-sitter (high confidence); regex-fallback observations are flagged in their ruleId and summary.",
+      "Experimental prototype. Coverage is source across many languages (JS/TS, Python, Go, Rust, Java, C/C++, C#, Ruby, PHP, shell, PowerShell, and more) via tree-sitter AST with regex fallback, plus npm/PyPI/Cargo/composer manifests. Not covered: compiled binaries and managed bytecode (decompilation track), full dataflow/reachability, runtime behavior.",
+      "Severity and confidence are independent. Every finding states what would disprove it.",
+      "Runtime verification was not run. Parallax scan/assess is static by default; sandbox execution, branch exploration, and network capture require explicit operator approval and an isolated environment.",
+      "Enrichment providers: local static provider active (observedAt=\u00abts\u00bb; ttl=scan-snapshot); unavailable offline providers: package-registry-osint, dns-whois-reputation, threat-intel, release-temporal-history, build-reproducibility.",
+      "Offline dependency context: inspected 1 dependency manifest(s) and 0 lockfile(s) for declared-vs-locked, unpinned-version, and source-hint enrichment.",
+      "Implemented MCD composition coverage in this engine: BP-SUPPLY, BP-TYPOSQUAT, BP-DROPPER, BP-CREDTHEFT, BP-OBFEXEC, BP-BACKDOOR, BP-EXFIL, BP-RANSOM, BP-TIMEBOMB, BP-MINER, BP-ROOTKIT, BP-WORM, BP-TROJAN, BP-AGENTMANIP, BP-LATERAL, BP-MITM. CLEAR means no findings matched this implemented set under the current static methods; it is not a full safety verdict and does not include runtime behavior or unavailable enrichment."
+    ],
+    "observationCount": 7
+  },
+  "disposition": {
+    "drivers": [
+      "1 high/critical-severity finding(s) at proof-aware confidence >= 0.65",
+      "1 cross-signal correlated cluster(s) at high/critical severity (corroborated co-location)"
+    ],
+    "rationale": "Recommend quarantine: 1 high/critical-severity finding(s) at proof-aware confidence >= 0.65; 1 cross-signal correlated cluster(s) at high/critical severity (corroborated co-location). Quarantine means hold the artifact and do not install or run it until the verification questions are answered. This is a recommended next-action from the evidence, not a maliciousness verdict; severity and confidence are reported separately.",
+    "recommendation": "quarantine",
+    "thresholds": "Disposition rule (deterministic; severity and confidence kept separate): quarantine if any high/critical-severity finding has proof-aware confidence >= 0.65, or a cross-signal correlated cluster is high/critical severity. Findings whose proof depth is only same-file co-occurrence or co-location are not promoted to quarantine by enrichment alone. Review if mcd findings exist but do not meet that bar; clear if there are no mcd findings. The model never sets the disposition."
+  },
+  "dynamicVerification": {
+    "approvalRequired": true,
+    "executedUntrustedCode": false,
+    "policy": "Runtime verification was not run. Parallax scan/assess is static by default; sandbox execution, branch exploration, and network capture require explicit operator approval and an isolated environment.",
+    "requestedByCompositions": [
+      "BP-SUPPLY",
+      "BP-TROJAN"
+    ],
+    "status": "not-run",
+    "tasks": [
+      {
+        "approvalRequired": true,
+        "description": "Execute selected code paths only inside an isolated sandbox or VM.",
+        "executedUntrustedCode": false,
+        "id": "sandbox-execution",
+        "method": "dynamic",
+        "requiresIsolation": true,
+        "status": "not-run",
+        "triggeredBy": [
+          {
+            "composition": "BP-SUPPLY",
+            "findingId": "mcd-1",
+            "question": "Does behavior differ under CI/sandbox?"
+          },
+          {
+            "composition": "BP-TROJAN",
+            "findingId": "mcd-4",
+            "question": "Would a normal user invoke this path through the advertised interface?"
+          }
+        ]
+      },
+      {
+        "approvalRequired": true,
+        "description": "Exercise time, environment, feature-flag, or dormant branches under controlled conditions.",
+        "executedUntrustedCode": false,
+        "id": "branch-exploration",
+        "method": "dynamic",
+        "requiresIsolation": true,
+        "status": "not-run",
+        "triggeredBy": [
+          {
+            "composition": "BP-SUPPLY",
+            "findingId": "mcd-1",
+            "question": "Does behavior differ under CI/sandbox?"
+          }
+        ]
+      },
+      {
+        "approvalRequired": true,
+        "description": "Capture egress, proxy, DNS, or TLS behavior in an isolated network.",
+        "executedUntrustedCode": false,
+        "id": "network-capture",
+        "method": "network",
+        "requiresIsolation": true,
+        "status": "not-run",
+        "triggeredBy": []
+      }
+    ]
+  },
+  "enrichment": [
+    {
+      "appliesTo": [
+        "EXEC",
+        "LOAD",
+        "NETW",
+        "FSYS",
+        "CRED"
+      ],
+      "appliesToCompositions": [
+        "BP-SUPPLY",
+        "BP-DROPPER",
+        "BP-CREDTHEFT",
+        "BP-OBFEXEC",
+        "BP-BACKDOOR",
+        "BP-EXFIL",
+        "BP-RANSOM",
+        "BP-TIMEBOMB",
+        "BP-MINER",
+        "BP-ROOTKIT",
+        "BP-WORM",
+        "BP-TROJAN",
+        "BP-LATERAL",
+        "BP-MITM"
+      ],
+      "appliesToLenses": [
+        "mcd"
+      ],
+      "effect": "amplifying",
+      "fact": "code runs at install time via a package lifecycle hook, before any explicit use",
+      "id": "ENR.EXEC.PHASE",
+      "observedAt": "\u00abts\u00bb",
+      "provider": {
+        "availability": "active",
+        "id": "local-static",
+        "kind": "local",
+        "name": "Local static provider"
+      },
+      "rationale": "install-time execution runs before a consumer can review or sandbox it, so a malicious-code finding that executes at install carries more weight",
+      "source": "manifest install hooks (static)",
+      "ttl": "scan-snapshot",
+      "weighting": {
+        "mcd": {
+          "ceiling": 0.95,
+          "effect": "amplifying",
+          "rule": "If the fact applies to a finding's cited atom families, adjust confidence by step; never change severity or the finding set.",
+          "step": 0.1
+        }
+      }
+    }
+  ],
+  "enrichmentProviders": [
+    {
+      "availability": "active",
+      "id": "local-static",
+      "kind": "local",
+      "name": "Local static provider",
+      "observedAt": "\u00abts\u00bb",
+      "provides": [
+        "ENR.EXEC.PHASE",
+        "ENR.DEP.RESOLUTION",
+        "ENR.DRIFT.NATIVE"
+      ],
+      "ttl": "scan-snapshot",
+      "unavailableReason": null
+    },
+    {
+      "availability": "active",
+      "id": "local-dependency-context",
+      "kind": "local",
+      "lockfileCount": 0,
+      "manifestCount": 1,
+      "name": "Local dependency manifests and lockfiles",
+      "observedAt": "\u00abts\u00bb",
+      "provides": [
+        "ENR.DEP.NO_LOCKFILE",
+        "ENR.DEP.UNLOCKED",
+        "ENR.DEP.LOCKED",
+        "ENR.DEP.SOURCE",
+        "ENR.PKG.UNPINNED",
+        "ENR.PKG.UNKNOWN_VERSION"
+      ],
+      "ttl": "scan-snapshot",
+      "unavailableReason": null
+    },
+    {
+      "availability": "unavailable",
+      "id": "package-registry-osint",
+      "kind": "external",
+      "name": "Package registry OSINT",
+      "observedAt": null,
+      "provides": [
+        "ENR.PKG.AGE",
+        "ENR.PKG.OWNER",
+        "ENR.PKG.DOWNLOADS",
+        "ENR.PKG.PROVENANCE"
+      ],
+      "ttl": "not-observed",
+      "unavailableReason": "offline engine: registry HTTP/API calls are intentionally not bundled"
+    },
+    {
+      "availability": "unavailable",
+      "id": "dns-whois-reputation",
+      "kind": "external",
+      "name": "DNS/WHOIS/domain reputation",
+      "observedAt": null,
+      "provides": [
+        "ENR.NET.DOMAIN_AGE",
+        "ENR.NET.HOSTING",
+        "ENR.NET.JURISDICTION",
+        "ENR.NET.REPUTATION"
+      ],
+      "ttl": "not-observed",
+      "unavailableReason": "offline engine: DNS, WHOIS, and reputation lookups are intentionally not bundled"
+    },
+    {
+      "availability": "unavailable",
+      "id": "threat-intel",
+      "kind": "external",
+      "name": "Threat-intelligence reputation",
+      "observedAt": null,
+      "provides": [
+        "ENR.NET.REPUTATION",
+        "ENR.PKG.REPUTATION",
+        "ENR.ARTF.REPUTATION"
+      ],
+      "ttl": "not-observed",
+      "unavailableReason": "offline engine: indicator and package reputation feeds are intentionally not bundled"
+    },
+    {
+      "availability": "unavailable",
+      "id": "release-temporal-history",
+      "kind": "external",
+      "name": "Release and maintainer temporal history",
+      "observedAt": null,
+      "provides": [
+        "ENR.TIME.DORMANCY",
+        "ENR.TIME.COORDINATED",
+        "ENR.TIME.PRESTAGED"
+      ],
+      "ttl": "not-observed",
+      "unavailableReason": "offline engine: publication timelines and maintainer history require registry/VCS providers"
+    },
+    {
+      "availability": "unavailable",
+      "id": "build-reproducibility",
+      "kind": "external",
+      "name": "Build reproducibility and source-to-binary drift",
+      "observedAt": null,
+      "provides": [
+        "ENR.DRIFT.REPRO",
+        "ENR.DRIFT.BEHAVIOR"
+      ],
+      "ttl": "not-observed",
+      "unavailableReason": "offline engine: rebuilds, attestations, and binary behavior comparison are not bundled"
+    }
+  ],
+  "executiveSummary": {
+    "author": "engine",
+    "text": "Disposition: QUARANTINE. 4 malicious-code finding(s); highest severity critical, highest confidence 0.7 (severity and confidence are independent). Strongest correlation: 4 malicious-code findings co-occur in `scripts/postinstall.js`: BP-BACKDOOR, BP-OBFEXEC, BP-SUPPLY, BP-TROJAN. Verify next: (1) Can data received from the listener or polling channel reach the execution sink? (2) Is the command channel documented, authenticated, and expected for this component? (3) What does the install hook fetch, decode, or execute, and from where?"
+  },
+  "findings": [
+    {
+      "amplifiers": [
+        "Behavior triggers at install, not at explicit use."
+      ],
+      "claim": "A package install hook (npm lifecycle script or Python setup.py) runs network, shell, or decode-and-execute behavior before any user code is invoked.",
+      "composition": "BP-SUPPLY",
+      "confidence": 0.7,
+      "confidenceLabel": "medium",
+      "disproofCriteria": [
+        "The install code is a documented, reproducible build step.",
+        "Fetched/decoded content is version-pinned with integrity (hash/signature) checks."
+      ],
+      "effectiveConfidence": 0.8,
+      "enrichment": [
+        {
+          "effect": "amplifying",
+          "id": "ENR.EXEC.PHASE",
+          "rationale": "install-time execution runs before a consumer can review or sandbox it, so a malicious-code finding that executes at install carries more weight"
+        }
+      ],
+      "evidence": [
+        "obs-1",
+        "obs-3",
+        "obs-4"
+      ],
+      "id": "mcd-1",
+      "lens": "mcd",
+      "response": {
+        "actions": [
+          "Block auto-install in CI until reviewed",
+          "Pin and vendor the dependency"
+        ],
+        "summary": "Engineering referral + passive monitoring until verified.",
+        "tier": 3
+      },
+      "severity": "high",
+      "title": "Install-time payload path",
+      "verification": [
+        {
+          "method": "static-source",
+          "question": "What does the install hook fetch, decode, or execute, and from where?",
+          "reason": "Confirm the payload behavior and destination."
+        },
+        {
+          "method": "osint",
+          "question": "Is the destination maintainer-controlled and documented?",
+          "reason": "Destination reputation changes interpretation."
+        },
+        {
+          "method": "dynamic",
+          "question": "Does behavior differ under CI/sandbox?",
+          "reason": "Install-time gating is a strong malicious signal."
+        }
+      ]
+    },
+    {
+      "attenuators": [
+        "Proof depth: same-file co-occurrence - observations share a file, but value flow was not traced source-to-sink."
+      ],
+      "claim": "Code decodes or decrypts a blob and then executes it. The payload is hidden from static review until it runs. Dataflow: not proven; the steps co-occur in this file, but intra-file taint did not trace a value from source to sink.",
+      "composition": "BP-OBFEXEC",
+      "confidence": 0.6,
+      "confidenceLabel": "medium",
+      "disproofCriteria": [
+        "The decoded content is data (config/templates), not code, and is never executed.",
+        "The transform is a documented packaging step over trusted, in-repo content.",
+        "No intra-file dataflow path links these observations (they co-occur but the value was not traced source-to-sink); confirm reachability before treating it as a connected path."
+      ],
+      "effectiveConfidence": 0.7,
+      "enrichment": [
+        {
+          "effect": "amplifying",
+          "id": "ENR.EXEC.PHASE",
+          "rationale": "install-time execution runs before a consumer can review or sandbox it, so a malicious-code finding that executes at install carries more weight"
+        }
+      ],
+      "evidence": [
+        "obs-4",
+        "obs-2",
+        "obs-5"
+      ],
+      "id": "mcd-2",
+      "lens": "mcd",
+      "response": {
+        "actions": [
+          "Statically decode the blob",
+          "Treat as untrusted until the payload is understood"
+        ],
+        "summary": "Decode and review the payload before trusting the package.",
+        "tier": 3
+      },
+      "severity": "high",
+      "title": "Obfuscated code execution (decode-and-execute)",
+      "verification": [
+        {
+          "method": "static-source",
+          "question": "Decode the blob: what does the executed payload do?",
+          "reason": "The hidden payload is the whole point."
+        },
+        {
+          "method": "static-source",
+          "question": "Where does the encoded/encrypted blob originate?",
+          "reason": "A local constant vs a fetched blob changes severity."
+        }
+      ]
+    },
+    {
+      "attenuators": [
+        "Static rule is a command-channel shape; authorization is not proven.",
+        "Proof depth: same-file co-occurrence - channel and execution atoms share a file; channel-to-exec flow is not proven."
+      ],
+      "claim": "Code exposes or polls a command channel and can execute commands or dynamic code from the same scope. This is the remote-access backdoor shape; static analysis does not prove the channel is unauthorized.",
+      "composition": "BP-BACKDOOR",
+      "confidence": 0.58,
+      "confidenceLabel": "medium",
+      "disproofCriteria": [
+        "The listener or polling loop is a documented administrative interface with authentication.",
+        "The execution sink cannot be influenced by messages from the channel.",
+        "No control-flow or dataflow path links these observations; they co-occur in one file or component but are not reachable from one another."
+      ],
+      "effectiveConfidence": 0.68,
+      "enrichment": [
+        {
+          "effect": "amplifying",
+          "id": "ENR.EXEC.PHASE",
+          "rationale": "install-time execution runs before a consumer can review or sandbox it, so a malicious-code finding that executes at install carries more weight"
+        }
+      ],
+      "evidence": [
+        "obs-3",
+        "obs-4",
+        "obs-2",
+        "obs-5"
+      ],
+      "id": "mcd-3",
+      "lens": "mcd",
+      "response": {
+        "actions": [
+          "Trace channel-to-exec dataflow",
+          "Block exposed listener/polling endpoint until reviewed"
+        ],
+        "summary": "Immediate response if reachable or unauthorized; otherwise active review.",
+        "tier": 5
+      },
+      "severity": "critical",
+      "title": "Backdoor command channel",
+      "verification": [
+        {
+          "method": "static-source",
+          "question": "Can data received from the listener or polling channel reach the execution sink?",
+          "reason": "Separates a backdoor from a normal server with local commands."
+        },
+        {
+          "method": "osint",
+          "question": "Is the command channel documented, authenticated, and expected for this component?",
+          "reason": "Authorization and intent are decisive for a backdoor."
+        }
+      ]
+    },
+    {
+      "attenuators": [
+        "Proof depth: same-file co-occurrence - concealment and payload atoms share a file; activation is not proven.",
+        "Purpose inference is heuristic; documentation review may explain the behavior."
+      ],
+      "claim": "The project's stated purpose does not suggest high-risk behavior, yet concealed or environment-aware code sits next to execution, network, credential, or privilege capability.",
+      "composition": "BP-TROJAN",
+      "confidence": 0.48,
+      "confidenceLabel": "medium",
+      "disproofCriteria": [
+        "The documentation explicitly explains the high-risk behavior as part of the real purpose.",
+        "The concealed marker is an inert test/example or standard packaging artifact.",
+        "No control-flow or dataflow path links these observations; they co-occur in one file or component but are not reachable from one another."
+      ],
+      "effectiveConfidence": 0.58,
+      "enrichment": [
+        {
+          "effect": "amplifying",
+          "id": "ENR.EXEC.PHASE",
+          "rationale": "install-time execution runs before a consumer can review or sandbox it, so a malicious-code finding that executes at install carries more weight"
+        }
+      ],
+      "evidence": [
+        "obs-4",
+        "obs-3"
+      ],
+      "id": "mcd-4",
+      "lens": "mcd",
+      "response": {
+        "actions": [
+          "Compare docs/README to behavior",
+          "Decode concealed strings and review activation"
+        ],
+        "summary": "Review as a disguised payload candidate.",
+        "tier": 3
+      },
+      "severity": "high",
+      "title": "Trojan / disguised payload",
+      "verification": [
+        {
+          "method": "static-source",
+          "question": "Does the concealed code implement behavior outside the documented purpose?",
+          "reason": "Trojan interpretation depends on mismatch plus payload."
+        },
+        {
+          "method": "dynamic",
+          "question": "Would a normal user invoke this path through the advertised interface?",
+          "reason": "Concealed activation matters."
+        }
+      ]
+    }
+  ],
+  "generatedFrom": {
+    "lens": "mcd",
+    "lensesRun": [
+      "mcd"
+    ],
+    "scanId": "\u00abid\u00bb",
+    "scannerVersion": "0.1.0"
+  },
+  "kind": "mcd-assessment",
+  "observations": [
+    {
+      "atom": "PKGM.INSTALL",
+      "confidence": 0.95,
+      "evidence": {
+        "matchedText": "node ./scripts/postinstall.js",
+        "summary": "package lifecycle hook scripts.install -> node ./scripts/postinstall.js"
+      },
+      "id": "obs-1",
+      "location": {
+        "path": "package.json",
+        "startLine": 6
+      },
+      "method": "static-source",
+      "provenance": {
+        "ruleId": "manifest.npm.lifecycle",
+        "scanner": "prlx",
+        "scannerVersion": "0.1.0",
+        "timestamp": "\u00abts\u00bb"
+      },
+      "relationships": [
+        {
+          "target": "scripts/postinstall.js",
+          "type": "manifest-entrypoint"
+        }
+      ]
+    },
+    {
+      "atom": "NETW.HTTP",
+      "confidence": 0.56,
+      "evidence": {
+        "matchedText": "https.get(",
+        "summary": "outbound HTTP request via https.get() (regex fallback, no AST)"
+      },
+      "id": "obs-3",
+      "location": {
+        "path": "scripts/postinstall.js",
+        "startLine": 5
+      },
+      "method": "static-source",
+      "provenance": {
+        "ruleId": "regex.NETW.HTTP",
+        "scanner": "prlx",
+        "scannerVersion": "0.1.0",
+        "timestamp": "\u00abts\u00bb"
+      },
+      "relationships": []
+    },
+    {
+      "atom": "LOAD.EVAL",
+      "confidence": 0.59,
+      "evidence": {
+        "matchedText": "eval(",
+        "summary": "dynamic code evaluation via eval() (regex fallback, no AST)"
+      },
+      "id": "obs-4",
+      "location": {
+        "path": "scripts/postinstall.js",
+        "startLine": 8
+      },
+      "method": "static-source",
+      "provenance": {
+        "ruleId": "regex.LOAD.EVAL",
+        "scanner": "prlx",
+        "scannerVersion": "0.1.0",
+        "timestamp": "\u00abts\u00bb"
+      },
+      "relationships": []
+    },
+    {
+      "atom": "XFRM.ENCODE",
+      "confidence": 0.42,
+      "evidence": {
+        "matchedText": "Buffer.from(",
+        "summary": "base64/buffer decode via Buffer.from() (regex fallback, no AST)"
+      },
+      "id": "obs-2",
+      "location": {
+        "path": "scripts/postinstall.js",
+        "startLine": 4
+      },
+      "method": "static-source",
+      "provenance": {
+        "ruleId": "regex.XFRM.ENCODE",
+        "scanner": "prlx",
+        "scannerVersion": "0.1.0",
+        "timestamp": "\u00abts\u00bb"
+      },
+      "relationships": []
+    },
+    {
+      "atom": "XFRM.ENCODE",
+      "confidence": 0.42,
+      "evidence": {
+        "matchedText": "Buffer.from(",
+        "summary": "base64/buffer decode via Buffer.from() (regex fallback, no AST)"
+      },
+      "id": "obs-5",
+      "location": {
+        "path": "scripts/postinstall.js",
+        "startLine": 8
+      },
+      "method": "static-source",
+      "provenance": {
+        "ruleId": "regex.XFRM.ENCODE",
+        "scanner": "prlx",
+        "scannerVersion": "0.1.0",
+        "timestamp": "\u00abts\u00bb"
+      },
+      "relationships": []
+    }
+  ],
+  "reachability": {},
+  "reviewLeads": [],
+  "schemaVersion": "0.1.0",
+  "summary": {
+    "binaryArtifacts": 0,
+    "binaryArtifactsWithHits": 0,
+    "compositions": [
+      "BP-BACKDOOR",
+      "BP-OBFEXEC",
+      "BP-SUPPLY",
+      "BP-TROJAN"
+    ],
+    "filesScanned": 3,
+    "findingCount": 4,
+    "highestConfidence": 0.7,
+    "highestConfidenceLabel": "medium",
+    "highestSeverity": "critical",
+    "relatedByLens": {},
+    "relatedFindingCount": 0
+  },
+  "target": {
+    "ecosystems": [
+      "npm"
+    ],
+    "path": "/Users/batteryshark/Downloads/runner-lab/mcd/tests/fixtures/evil-npm"
+  }
+}

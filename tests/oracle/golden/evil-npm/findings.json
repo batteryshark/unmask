@@ -1,0 +1,180 @@
+[
+  {
+    "amplifiers": [
+      "Behavior triggers at install, not at explicit use."
+    ],
+    "claim": "A package install hook (npm lifecycle script or Python setup.py) runs network, shell, or decode-and-execute behavior before any user code is invoked.",
+    "composition": "BP-SUPPLY",
+    "confidence": 0.7,
+    "confidenceLabel": "medium",
+    "disproofCriteria": [
+      "The install code is a documented, reproducible build step.",
+      "Fetched/decoded content is version-pinned with integrity (hash/signature) checks."
+    ],
+    "evidence": [
+      "obs-1",
+      "obs-3",
+      "obs-4"
+    ],
+    "id": "mcd-1",
+    "lens": "mcd",
+    "response": {
+      "actions": [
+        "Block auto-install in CI until reviewed",
+        "Pin and vendor the dependency"
+      ],
+      "summary": "Engineering referral + passive monitoring until verified.",
+      "tier": 3
+    },
+    "severity": "high",
+    "title": "Install-time payload path",
+    "verification": [
+      {
+        "method": "static-source",
+        "question": "What does the install hook fetch, decode, or execute, and from where?",
+        "reason": "Confirm the payload behavior and destination."
+      },
+      {
+        "method": "osint",
+        "question": "Is the destination maintainer-controlled and documented?",
+        "reason": "Destination reputation changes interpretation."
+      },
+      {
+        "method": "dynamic",
+        "question": "Does behavior differ under CI/sandbox?",
+        "reason": "Install-time gating is a strong malicious signal."
+      }
+    ]
+  },
+  {
+    "attenuators": [
+      "Proof depth: same-file co-occurrence - observations share a file, but value flow was not traced source-to-sink."
+    ],
+    "claim": "Code decodes or decrypts a blob and then executes it. The payload is hidden from static review until it runs. Dataflow: not proven; the steps co-occur in this file, but intra-file taint did not trace a value from source to sink.",
+    "composition": "BP-OBFEXEC",
+    "confidence": 0.6,
+    "confidenceLabel": "medium",
+    "disproofCriteria": [
+      "The decoded content is data (config/templates), not code, and is never executed.",
+      "The transform is a documented packaging step over trusted, in-repo content.",
+      "No intra-file dataflow path links these observations (they co-occur but the value was not traced source-to-sink); confirm reachability before treating it as a connected path."
+    ],
+    "evidence": [
+      "obs-4",
+      "obs-2",
+      "obs-5"
+    ],
+    "id": "mcd-2",
+    "lens": "mcd",
+    "response": {
+      "actions": [
+        "Statically decode the blob",
+        "Treat as untrusted until the payload is understood"
+      ],
+      "summary": "Decode and review the payload before trusting the package.",
+      "tier": 3
+    },
+    "severity": "high",
+    "title": "Obfuscated code execution (decode-and-execute)",
+    "verification": [
+      {
+        "method": "static-source",
+        "question": "Decode the blob: what does the executed payload do?",
+        "reason": "The hidden payload is the whole point."
+      },
+      {
+        "method": "static-source",
+        "question": "Where does the encoded/encrypted blob originate?",
+        "reason": "A local constant vs a fetched blob changes severity."
+      }
+    ]
+  },
+  {
+    "attenuators": [
+      "Static rule is a command-channel shape; authorization is not proven.",
+      "Proof depth: same-file co-occurrence - channel and execution atoms share a file; channel-to-exec flow is not proven."
+    ],
+    "claim": "Code exposes or polls a command channel and can execute commands or dynamic code from the same scope. This is the remote-access backdoor shape; static analysis does not prove the channel is unauthorized.",
+    "composition": "BP-BACKDOOR",
+    "confidence": 0.58,
+    "confidenceLabel": "medium",
+    "disproofCriteria": [
+      "The listener or polling loop is a documented administrative interface with authentication.",
+      "The execution sink cannot be influenced by messages from the channel.",
+      "No control-flow or dataflow path links these observations; they co-occur in one file or component but are not reachable from one another."
+    ],
+    "evidence": [
+      "obs-3",
+      "obs-4",
+      "obs-2",
+      "obs-5"
+    ],
+    "id": "mcd-3",
+    "lens": "mcd",
+    "response": {
+      "actions": [
+        "Trace channel-to-exec dataflow",
+        "Block exposed listener/polling endpoint until reviewed"
+      ],
+      "summary": "Immediate response if reachable or unauthorized; otherwise active review.",
+      "tier": 5
+    },
+    "severity": "critical",
+    "title": "Backdoor command channel",
+    "verification": [
+      {
+        "method": "static-source",
+        "question": "Can data received from the listener or polling channel reach the execution sink?",
+        "reason": "Separates a backdoor from a normal server with local commands."
+      },
+      {
+        "method": "osint",
+        "question": "Is the command channel documented, authenticated, and expected for this component?",
+        "reason": "Authorization and intent are decisive for a backdoor."
+      }
+    ]
+  },
+  {
+    "attenuators": [
+      "Proof depth: same-file co-occurrence - concealment and payload atoms share a file; activation is not proven.",
+      "Purpose inference is heuristic; documentation review may explain the behavior."
+    ],
+    "claim": "The project's stated purpose does not suggest high-risk behavior, yet concealed or environment-aware code sits next to execution, network, credential, or privilege capability.",
+    "composition": "BP-TROJAN",
+    "confidence": 0.48,
+    "confidenceLabel": "medium",
+    "disproofCriteria": [
+      "The documentation explicitly explains the high-risk behavior as part of the real purpose.",
+      "The concealed marker is an inert test/example or standard packaging artifact.",
+      "No control-flow or dataflow path links these observations; they co-occur in one file or component but are not reachable from one another."
+    ],
+    "evidence": [
+      "obs-4",
+      "obs-3"
+    ],
+    "id": "mcd-4",
+    "lens": "mcd",
+    "response": {
+      "actions": [
+        "Compare docs/README to behavior",
+        "Decode concealed strings and review activation"
+      ],
+      "summary": "Review as a disguised payload candidate.",
+      "tier": 3
+    },
+    "severity": "high",
+    "title": "Trojan / disguised payload",
+    "verification": [
+      {
+        "method": "static-source",
+        "question": "Does the concealed code implement behavior outside the documented purpose?",
+        "reason": "Trojan interpretation depends on mismatch plus payload."
+      },
+      {
+        "method": "dynamic",
+        "question": "Would a normal user invoke this path through the advertised interface?",
+        "reason": "Concealed activation matters."
+      }
+    ]
+  }
+]

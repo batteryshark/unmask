@@ -1,0 +1,11 @@
+[
+  {
+    "atom": "PKGM.UNDECLARED",
+    "confidence": 0.45,
+    "line": null,
+    "method": "static-source",
+    "path": "util.py",
+    "relationships": [],
+    "rule_id": "supply.undeclared"
+  }
+]

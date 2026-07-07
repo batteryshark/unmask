@@ -1,0 +1,38 @@
+{
+  "engineRoot": "/Users/batteryshark/Downloads/runner-lab/parallax-goalpacks",
+  "engineVersion": "0.1.0",
+  "fixedStarted": "2026-01-01T00:00:00+00:00",
+  "fixtures": {
+    "benign-pkg": {
+      "compositions": [],
+      "disposition": "clear",
+      "findings": 0,
+      "observations": 1
+    },
+    "evil-npm": {
+      "compositions": [
+        "BP-BACKDOOR",
+        "BP-OBFEXEC",
+        "BP-SUPPLY",
+        "BP-TROJAN"
+      ],
+      "disposition": "quarantine",
+      "findings": 4,
+      "observations": 7
+    },
+    "obf-js": {
+      "compositions": [
+        "BP-OBFEXEC"
+      ],
+      "disposition": "review",
+      "findings": 1,
+      "observations": 2
+    },
+    "py-curlpipe": {
+      "compositions": [],
+      "disposition": "clear",
+      "findings": 0,
+      "observations": 7
+    }
+  }
+}

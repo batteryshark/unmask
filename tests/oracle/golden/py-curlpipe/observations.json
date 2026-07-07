@@ -1,0 +1,65 @@
+[
+  {
+    "atom": "ARTF.URL",
+    "confidence": 0.7,
+    "line": null,
+    "method": "static-source",
+    "path": "loader.py",
+    "relationships": [],
+    "rule_id": "regex.ARTF.URL"
+  },
+  {
+    "atom": "LOAD.EVAL",
+    "confidence": 0.59,
+    "line": null,
+    "method": "static-source",
+    "path": "loader.py",
+    "relationships": [],
+    "rule_id": "regex.LOAD.EVAL"
+  },
+  {
+    "atom": "NETW.HTTP",
+    "confidence": 0.56,
+    "line": null,
+    "method": "static-source",
+    "path": "loader.py",
+    "relationships": [],
+    "rule_id": "regex.NETW.HTTP"
+  },
+  {
+    "atom": "ARTF.URL",
+    "confidence": 0.7,
+    "line": null,
+    "method": "static-source",
+    "path": "setup.py",
+    "relationships": [],
+    "rule_id": "regex.ARTF.URL"
+  },
+  {
+    "atom": "EXEC.SHELL",
+    "confidence": 0.59,
+    "line": null,
+    "method": "static-source",
+    "path": "setup.py",
+    "relationships": [],
+    "rule_id": "regex.EXEC.SHELL"
+  },
+  {
+    "atom": "EXEC.SHELL",
+    "confidence": 0.8,
+    "line": null,
+    "method": "static-source",
+    "path": "setup.py",
+    "relationships": [],
+    "rule_id": "regex.EXEC.SHELL"
+  },
+  {
+    "atom": "PKGM.INSTALL",
+    "confidence": 0.55,
+    "line": null,
+    "method": "static-source",
+    "path": "setup.py",
+    "relationships": [],
+    "rule_id": "manifest.pypi.setup"
+  }
+]

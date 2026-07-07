@@ -1,0 +1,44 @@
+[
+  {
+    "attenuators": [
+      "Proof depth: same-file co-occurrence - observations share a file, but value flow was not traced source-to-sink."
+    ],
+    "claim": "Code decodes or decrypts a blob and then executes it. The payload is hidden from static review until it runs. Dataflow: not proven; the steps co-occur in this file, but intra-file taint did not trace a value from source to sink.",
+    "composition": "BP-OBFEXEC",
+    "confidence": 0.6,
+    "confidenceLabel": "medium",
+    "disproofCriteria": [
+      "The decoded content is data (config/templates), not code, and is never executed.",
+      "The transform is a documented packaging step over trusted, in-repo content.",
+      "No intra-file dataflow path links these observations (they co-occur but the value was not traced source-to-sink); confirm reachability before treating it as a connected path."
+    ],
+    "evidence": [
+      "obs-2",
+      "obs-1"
+    ],
+    "id": "mcd-1",
+    "lens": "mcd",
+    "response": {
+      "actions": [
+        "Statically decode the blob",
+        "Treat as untrusted until the payload is understood"
+      ],
+      "summary": "Decode and review the payload before trusting the package.",
+      "tier": 3
+    },
+    "severity": "high",
+    "title": "Obfuscated code execution (decode-and-execute)",
+    "verification": [
+      {
+        "method": "static-source",
+        "question": "Decode the blob: what does the executed payload do?",
+        "reason": "The hidden payload is the whole point."
+      },
+      {
+        "method": "static-source",
+        "question": "Where does the encoded/encrypted blob originate?",
+        "reason": "A local constant vs a fetched blob changes severity."
+      }
+    ]
+  }
+]

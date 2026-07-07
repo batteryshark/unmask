@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+build/
+dist/
+
+# uv
+.uv/
+
+# Tooling / OS
+.DS_Store
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+
+# Run output (scans write here by default)
+.mcd/
+
+# Vendored scanner / taxonomy get committed once the vendor step exists;
+# until then they resolve from a sibling parallax checkout via env/config.

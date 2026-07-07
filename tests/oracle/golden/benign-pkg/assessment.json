@@ -1,0 +1,256 @@
+{
+  "assessment": {
+    "generatedAt": "\u00abts\u00bb",
+    "id": "\u00abid\u00bb",
+    "scanner": "prlx",
+    "scannerVersion": "0.1.0"
+  },
+  "binaries": [],
+  "contract": {
+    "note": "This is a Parallax MCD assessment: a projection of a scan onto the malicious-code question. It recommends a disposition (a next-action), not a maliciousness verdict. Severity (how bad if real) is reported separately from confidence (how sure), and every finding states what would disprove it. The rules own coverage and the mcd lens owns judgment; this view composes them and does not re-analyze."
+  },
+  "correlations": [],
+  "coverage": {
+    "lensesRun": [
+      "mcd"
+    ],
+    "notes": [
+      "Observation mode: regex-fallback. AST = tree-sitter (high confidence); regex-fallback observations are flagged in their ruleId and summary.",
+      "Experimental prototype. Coverage is source across many languages (JS/TS, Python, Go, Rust, Java, C/C++, C#, Ruby, PHP, shell, PowerShell, and more) via tree-sitter AST with regex fallback, plus npm/PyPI/Cargo/composer manifests. Not covered: compiled binaries and managed bytecode (decompilation track), full dataflow/reachability, runtime behavior.",
+      "Severity and confidence are independent. Every finding states what would disprove it.",
+      "Runtime verification was not run. Parallax scan/assess is static by default; sandbox execution, branch exploration, and network capture require explicit operator approval and an isolated environment.",
+      "Enrichment providers: local static provider active (observedAt=\u00abts\u00bb; ttl=scan-snapshot); unavailable offline providers: package-registry-osint, dns-whois-reputation, threat-intel, release-temporal-history, build-reproducibility.",
+      "Offline dependency context: inspected 1 dependency manifest(s) and 0 lockfile(s) for declared-vs-locked, unpinned-version, and source-hint enrichment.",
+      "Implemented MCD composition coverage in this engine: BP-SUPPLY, BP-TYPOSQUAT, BP-DROPPER, BP-CREDTHEFT, BP-OBFEXEC, BP-BACKDOOR, BP-EXFIL, BP-RANSOM, BP-TIMEBOMB, BP-MINER, BP-ROOTKIT, BP-WORM, BP-TROJAN, BP-AGENTMANIP, BP-LATERAL, BP-MITM. CLEAR means no findings matched this implemented set under the current static methods; it is not a full safety verdict and does not include runtime behavior or unavailable enrichment."
+    ],
+    "observationCount": 1
+  },
+  "disposition": {
+    "drivers": [],
+    "rationale": "No malicious-code (mcd) findings. This is 'clear of mcd findings', not a guarantee of safety; read the coverage section for implemented composition coverage and, if other lenses fired, the related-signals note.",
+    "recommendation": "clear",
+    "thresholds": "Disposition rule (deterministic; severity and confidence kept separate): quarantine if any high/critical-severity finding has proof-aware confidence >= 0.65, or a cross-signal correlated cluster is high/critical severity. Findings whose proof depth is only same-file co-occurrence or co-location are not promoted to quarantine by enrichment alone. Review if mcd findings exist but do not meet that bar; clear if there are no mcd findings. The model never sets the disposition."
+  },
+  "dynamicVerification": {
+    "approvalRequired": true,
+    "executedUntrustedCode": false,
+    "policy": "Runtime verification was not run. Parallax scan/assess is static by default; sandbox execution, branch exploration, and network capture require explicit operator approval and an isolated environment.",
+    "requestedByCompositions": [],
+    "status": "not-run",
+    "tasks": [
+      {
+        "approvalRequired": true,
+        "description": "Execute selected code paths only inside an isolated sandbox or VM.",
+        "executedUntrustedCode": false,
+        "id": "sandbox-execution",
+        "method": "dynamic",
+        "requiresIsolation": true,
+        "status": "not-run",
+        "triggeredBy": []
+      },
+      {
+        "approvalRequired": true,
+        "description": "Exercise time, environment, feature-flag, or dormant branches under controlled conditions.",
+        "executedUntrustedCode": false,
+        "id": "branch-exploration",
+        "method": "dynamic",
+        "requiresIsolation": true,
+        "status": "not-run",
+        "triggeredBy": []
+      },
+      {
+        "approvalRequired": true,
+        "description": "Capture egress, proxy, DNS, or TLS behavior in an isolated network.",
+        "executedUntrustedCode": false,
+        "id": "network-capture",
+        "method": "network",
+        "requiresIsolation": true,
+        "status": "not-run",
+        "triggeredBy": []
+      }
+    ]
+  },
+  "enrichment": [
+    {
+      "appliesTo": [
+        "NETW",
+        "EXEC",
+        "LOAD"
+      ],
+      "appliesToCompositions": [
+        "BP-SUPPLY",
+        "BP-TYPOSQUAT",
+        "BP-DROPPER",
+        "BP-OBFEXEC",
+        "BP-TROJAN",
+        "BP-AGENTMANIP"
+      ],
+      "appliesToLenses": [
+        "mcd"
+      ],
+      "effect": "amplifying",
+      "fact": "imports a module that is not a declared dependency (unpinned resolution path)",
+      "id": "ENR.DEP.RESOLUTION",
+      "observedAt": "\u00abts\u00bb",
+      "provider": {
+        "availability": "active",
+        "id": "local-static",
+        "kind": "local",
+        "name": "Local static provider"
+      },
+      "rationale": "an unpinned import can be supplied by whoever registers the name, so adverse behavior near it is more concerning",
+      "source": "manifest vs imports (static)",
+      "ttl": "scan-snapshot",
+      "weighting": {
+        "mcd": {
+          "ceiling": 0.95,
+          "effect": "amplifying",
+          "rule": "If the fact applies to a finding's cited atom families, adjust confidence by step; never change severity or the finding set.",
+          "step": 0.1
+        }
+      }
+    }
+  ],
+  "enrichmentProviders": [
+    {
+      "availability": "active",
+      "id": "local-static",
+      "kind": "local",
+      "name": "Local static provider",
+      "observedAt": "\u00abts\u00bb",
+      "provides": [
+        "ENR.EXEC.PHASE",
+        "ENR.DEP.RESOLUTION",
+        "ENR.DRIFT.NATIVE"
+      ],
+      "ttl": "scan-snapshot",
+      "unavailableReason": null
+    },
+    {
+      "availability": "active",
+      "id": "local-dependency-context",
+      "kind": "local",
+      "lockfileCount": 0,
+      "manifestCount": 1,
+      "name": "Local dependency manifests and lockfiles",
+      "observedAt": "\u00abts\u00bb",
+      "provides": [
+        "ENR.DEP.NO_LOCKFILE",
+        "ENR.DEP.UNLOCKED",
+        "ENR.DEP.LOCKED",
+        "ENR.DEP.SOURCE",
+        "ENR.PKG.UNPINNED",
+        "ENR.PKG.UNKNOWN_VERSION"
+      ],
+      "ttl": "scan-snapshot",
+      "unavailableReason": null
+    },
+    {
+      "availability": "unavailable",
+      "id": "package-registry-osint",
+      "kind": "external",
+      "name": "Package registry OSINT",
+      "observedAt": null,
+      "provides": [
+        "ENR.PKG.AGE",
+        "ENR.PKG.OWNER",
+        "ENR.PKG.DOWNLOADS",
+        "ENR.PKG.PROVENANCE"
+      ],
+      "ttl": "not-observed",
+      "unavailableReason": "offline engine: registry HTTP/API calls are intentionally not bundled"
+    },
+    {
+      "availability": "unavailable",
+      "id": "dns-whois-reputation",
+      "kind": "external",
+      "name": "DNS/WHOIS/domain reputation",
+      "observedAt": null,
+      "provides": [
+        "ENR.NET.DOMAIN_AGE",
+        "ENR.NET.HOSTING",
+        "ENR.NET.JURISDICTION",
+        "ENR.NET.REPUTATION"
+      ],
+      "ttl": "not-observed",
+      "unavailableReason": "offline engine: DNS, WHOIS, and reputation lookups are intentionally not bundled"
+    },
+    {
+      "availability": "unavailable",
+      "id": "threat-intel",
+      "kind": "external",
+      "name": "Threat-intelligence reputation",
+      "observedAt": null,
+      "provides": [
+        "ENR.NET.REPUTATION",
+        "ENR.PKG.REPUTATION",
+        "ENR.ARTF.REPUTATION"
+      ],
+      "ttl": "not-observed",
+      "unavailableReason": "offline engine: indicator and package reputation feeds are intentionally not bundled"
+    },
+    {
+      "availability": "unavailable",
+      "id": "release-temporal-history",
+      "kind": "external",
+      "name": "Release and maintainer temporal history",
+      "observedAt": null,
+      "provides": [
+        "ENR.TIME.DORMANCY",
+        "ENR.TIME.COORDINATED",
+        "ENR.TIME.PRESTAGED"
+      ],
+      "ttl": "not-observed",
+      "unavailableReason": "offline engine: publication timelines and maintainer history require registry/VCS providers"
+    },
+    {
+      "availability": "unavailable",
+      "id": "build-reproducibility",
+      "kind": "external",
+      "name": "Build reproducibility and source-to-binary drift",
+      "observedAt": null,
+      "provides": [
+        "ENR.DRIFT.REPRO",
+        "ENR.DRIFT.BEHAVIOR"
+      ],
+      "ttl": "not-observed",
+      "unavailableReason": "offline engine: rebuilds, attestations, and binary behavior comparison are not bundled"
+    }
+  ],
+  "executiveSummary": {
+    "author": "engine",
+    "text": "Disposition: CLEAR. 0 malicious-code finding(s); highest severity none, highest confidence n/a (severity and confidence are independent)."
+  },
+  "findings": [],
+  "generatedFrom": {
+    "lens": "mcd",
+    "lensesRun": [
+      "mcd"
+    ],
+    "scanId": "\u00abid\u00bb",
+    "scannerVersion": "0.1.0"
+  },
+  "kind": "mcd-assessment",
+  "observations": [],
+  "reachability": {},
+  "reviewLeads": [],
+  "schemaVersion": "0.1.0",
+  "summary": {
+    "binaryArtifacts": 0,
+    "binaryArtifactsWithHits": 0,
+    "compositions": [],
+    "filesScanned": 3,
+    "findingCount": 0,
+    "highestConfidence": null,
+    "highestConfidenceLabel": null,
+    "highestSeverity": null,
+    "relatedByLens": {},
+    "relatedFindingCount": 0
+  },
+  "target": {
+    "ecosystems": [
+      "npm"
+    ],
+    "path": "/Users/batteryshark/Downloads/runner-lab/mcd/tests/oracle/fixtures/benign-pkg"
+  }
+}
