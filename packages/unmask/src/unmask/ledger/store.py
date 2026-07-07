@@ -204,6 +204,16 @@ class LedgerStore:
         self.conn.execute("delete from findings where run_id=?", (run_id,))
         self.conn.commit()
 
+    def reset_run_derived(self, run_id: str) -> None:
+        """Clear everything a re-drive regenerates, keeping the run row itself. Resume
+        starts from a clean slate so nodes re-record without duplicating; anything
+        worth reusing (fetched bytes, decompiled trees) lives on disk, not in these
+        tables."""
+        for table in ("artifacts", "observations", "findings", "work_items",
+                      "graph_events", "judgments", "qa_suggestions", "reports"):
+            self.conn.execute(f"delete from {table} where run_id=?", (run_id,))
+        self.conn.commit()
+
     # --- judgments (agentic review) --------------------------------------
     def record_judgment(self, run_id: str, review, *, reviewer="agentic", model=None) -> str:
         """Persist a FindingReview as a durable judgment row."""

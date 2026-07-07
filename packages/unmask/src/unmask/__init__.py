@@ -14,7 +14,7 @@ Public API (stable surface):
 from __future__ import annotations
 
 from unmask.config import MCDConfig
-from unmask.run import RunResult, run_mcd
+from unmask.run import RunResult, resume_mcd, run_mcd
 
-__all__ = ["MCDConfig", "RunResult", "run_mcd"]
+__all__ = ["MCDConfig", "RunResult", "run_mcd", "resume_mcd"]
 __version__ = "0.0.1"

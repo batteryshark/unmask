@@ -85,6 +85,21 @@ def _cmd_tools(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_resume(args: argparse.Namespace) -> int:
+    from unmask.run import resume_mcd
+
+    result = resume_mcd(args.run_dir)
+    if args.json:
+        print(json.dumps(result.__dict__, indent=2))
+        return 0
+    print(f"Resumed:    {result.run_id}")
+    print(f"Dir:        {result.run_dir}")
+    print(f"Status:     {result.status}")
+    print(f"Disposition:{result.disposition!s:>12}   ({result.finding_count} finding(s))")
+    print(f"Report:     {result.report_paths['html']}")
+    return 0 if result.status == "completed" else 1
+
+
 def _cmd_status(args: argparse.Namespace) -> int:
     from unmask.run import status_of
 
@@ -156,6 +171,12 @@ def build_parser() -> argparse.ArgumentParser:
     tools.add_argument("tools_cmd", choices=["doctor"])
     tools.add_argument("--json", action="store_true")
     tools.set_defaults(func=_cmd_tools)
+
+    res = sub.add_parser("resume", help="re-drive an existing run from its ledger, "
+                                        "reusing fetched content")
+    res.add_argument("--run-dir", required=True)
+    res.add_argument("--json", action="store_true")
+    res.set_defaults(func=_cmd_resume)
 
     st = sub.add_parser("status", help="run status from run.json")
     st.add_argument("--run-dir", required=True)

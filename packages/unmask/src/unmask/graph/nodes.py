@@ -180,7 +180,7 @@ class FetchReferences(BaseNode[MCDGraphState, MCDGraphDeps, dict]):
         if observations is None or inv is None:
             return ProcessTransforms()
 
-        from unmask.net import FetchPolicy, extract_fetch_targets
+        from unmask.net import FetchPolicy, FetchResult, extract_fetch_targets
         from unmask.net import fetch as net_fetch
         targets = extract_fetch_targets(observations, inv)
         if not targets:
@@ -188,7 +188,17 @@ class FetchReferences(BaseNode[MCDGraphState, MCDGraphDeps, dict]):
             return ProcessTransforms()
 
         policy = FetchPolicy()
-        fetchdir = str(d.paths.run_dir / "fetched")
+        fetchdir = d.paths.run_dir / "fetched"
+        # Durable per-run fetch cache: on `mcd resume` the bytes are reused from disk
+        # instead of re-hitting the (attacker-referenced) network.
+        manifest_path = fetchdir / "manifest.json"
+        manifest: dict = {}
+        if manifest_path.exists():
+            try:
+                manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                manifest = {}
+
         summaries: list[dict] = []
         derived: list[DerivedSource] = []
         for i, t in enumerate(targets[: policy.max_fetches]):
@@ -196,12 +206,24 @@ class FetchReferences(BaseNode[MCDGraphState, MCDGraphDeps, dict]):
                 run_id=s.run_id, key=stable_key(t.url, "fetch"), target=t.url,
                 operation="fetch", category="network",
                 title=f"Fetch referenced URL {t.url}", payload={"sourceRel": t.source_rel})
-            res = await asyncio.to_thread(
-                partial(net_fetch, t.url, os.path.join(fetchdir, f"t{i}"), policy))
+            cached = manifest.get(t.url)
+            reused = bool(cached and cached.get("path") and Path(cached["path"]).exists())
+            if reused:
+                res = FetchResult(url=t.url, ok=True, path=cached["path"], status=cached.get("status"),
+                                  content_type=cached.get("contentType"), bytes_len=cached.get("bytes", 0),
+                                  sha256=cached.get("sha256"), final_url=cached.get("finalUrl"))
+            else:
+                res = await asyncio.to_thread(
+                    partial(net_fetch, t.url, str(fetchdir / f"t{i}"), policy))
+                if res.ok and res.path:
+                    manifest[t.url] = {"path": res.path, "sha256": res.sha256, "bytes": res.bytes_len,
+                                       "status": res.status, "contentType": res.content_type,
+                                       "finalUrl": res.final_url}
             summaries.append({
-                "url": t.url, "sourceRel": t.source_rel, "ok": res.ok, "status": res.status,
-                "bytes": res.bytes_len, "sha256": res.sha256, "contentType": res.content_type,
-                "blocked": res.blocked_reason, "error": res.error, "redirects": res.redirects,
+                "url": t.url, "sourceRel": t.source_rel, "ok": res.ok, "reused": reused,
+                "status": res.status, "bytes": res.bytes_len, "sha256": res.sha256,
+                "contentType": res.content_type, "blocked": res.blocked_reason,
+                "error": res.error, "redirects": res.redirects,
             })
             if res.ok and res.path:
                 origin = f"{t.source_rel}»fetch"
@@ -209,12 +231,18 @@ class FetchReferences(BaseNode[MCDGraphState, MCDGraphDeps, dict]):
                 d.ledger.add_artifact(
                     run_id=s.run_id, kind="fetched-content", origin="fetch", path=res.path,
                     logical_path=f"{origin}!{os.path.basename(res.path)}",
-                    metadata={"url": t.url, "sha256": res.sha256, "bytes": res.bytes_len})
+                    metadata={"url": t.url, "sha256": res.sha256, "bytes": res.bytes_len, "reused": reused})
                 d.ledger.set_work_status(wid, "done",
-                    result={"sha256": res.sha256, "bytes": res.bytes_len})
+                    result={"sha256": res.sha256, "bytes": res.bytes_len, "reused": reused})
             else:
                 d.ledger.set_work_status(wid, "blocked" if res.blocked_reason else "failed",
                     error=res.blocked_reason or res.error)
+
+        try:
+            fetchdir.mkdir(parents=True, exist_ok=True)
+            manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+        except OSError:
+            pass
 
         grew = False
         if derived:
@@ -234,6 +262,7 @@ class FetchReferences(BaseNode[MCDGraphState, MCDGraphDeps, dict]):
             d.scratch["union_grew"] = True
         d.ledger.event(s.run_id, "FetchReferences", "note", {
             "targets": len(targets), "fetched": sum(1 for x in summaries if x["ok"]),
+            "reused": sum(1 for x in summaries if x.get("reused")),
             "blocked": sum(1 for x in summaries if x.get("blocked")), "grew": grew})
         return ProcessTransforms()
 
