@@ -28,8 +28,8 @@ def _normalize_observation(o) -> dict:
 
 
 class NativeScanner:
-    def scan(self, target: str) -> ScanResult:
-        observations, inv = observe(target)
+    def scan(self, target: str, *, reveal_dir=None) -> ScanResult:
+        observations, inv = observe(target, reveal_dir=reveal_dir)
         findings = compose_mcd(observations, inv)
         assessment = build_assessment(findings, observations, inv, target)
         rendered = {

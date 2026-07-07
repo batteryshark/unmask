@@ -125,8 +125,10 @@ class ScanAndCompose(BaseNode[MCDGraphState, MCDGraphDeps, dict]):
     async def run(self, ctx: _Ctx) -> "ReviewFindings | CoverageGate":
         d, s = ctx.deps, ctx.state
         _enter(ctx, "ScanAndCompose")
+        reveal_dir = str(d.paths.run_dir / "revealed")
         try:
-            result = await asyncio.to_thread(NativeScanner().scan, str(s.target_path))
+            result = await asyncio.to_thread(
+                partial(NativeScanner().scan, str(s.target_path), reveal_dir=reveal_dir))
         except Exception as exc:  # a broken target, not a missing scanner
             _fail_op(ctx, "scan-source", repr(exc))
             d.scratch["scanner_error"] = repr(exc)

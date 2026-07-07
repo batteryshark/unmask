@@ -12,8 +12,9 @@ from __future__ import annotations
 from unmask.scanner.observe import callgraph, dataflow
 from unmask.scanner.observe.atoms import Observation
 from unmask.scanner.observe.callee import observe_callee
+from unmask.scanner.observe.containers import reveal
 from unmask.scanner.observe.content import observe_content
-from unmask.scanner.observe.inventory import Inventory, build_inventory
+from unmask.scanner.observe.inventory import FileEntry, Inventory, build_inventory
 from unmask.scanner.observe.manifest import observe_manifest
 from unmask.scanner.observe.supply import observe_supply
 from unmask.scanner.signatures import Signatures
@@ -24,8 +25,21 @@ from unmask.scanner.signatures import Signatures
 _DATAFLOW_FAMILIES = ("NETW", "CRED", "EXEC", "LOAD", "FSYS", "XFRM")
 
 
-def observe(target: str, sigs: Signatures | None = None) -> tuple[list[Observation], Inventory]:
+def _merge_revealed(inv: Inventory, target: str, reveal_dir) -> None:
+    """Unpack containers under `target` and fold the revealed files into `inv`, with
+    `container!member` logical paths so compose treats them as their own scope."""
+    for revealed_root, origin in reveal(target, reveal_dir):
+        for f in build_inventory(str(revealed_root)).files:
+            inv.files.append(FileEntry(
+                path=f.path, rel=f"{origin}!{f.rel}", kind=f.kind,
+                language=f.language, ecosystem=f.ecosystem, size=f.size))
+
+
+def observe(target: str, sigs: Signatures | None = None, *,
+            reveal_dir=None) -> tuple[list[Observation], Inventory]:
     inv = build_inventory(target)
+    if reveal_dir is not None:
+        _merge_revealed(inv, target, reveal_dir)
     sigs = sigs or Signatures.load_vendored()
 
     observations: list[Observation] = []
