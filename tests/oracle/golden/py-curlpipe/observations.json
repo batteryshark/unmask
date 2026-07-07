@@ -10,21 +10,21 @@
   },
   {
     "atom": "LOAD.EVAL",
-    "confidence": 0.59,
+    "confidence": 0.85,
     "line": null,
     "method": "static-source",
     "path": "loader.py",
     "relationships": [],
-    "rule_id": "regex.LOAD.EVAL"
+    "rule_id": "ast.LOAD.EVAL"
   },
   {
     "atom": "NETW.HTTP",
-    "confidence": 0.56,
+    "confidence": 0.8,
     "line": null,
     "method": "static-source",
     "path": "loader.py",
     "relationships": [],
-    "rule_id": "regex.NETW.HTTP"
+    "rule_id": "ast.NETW.HTTP"
   },
   {
     "atom": "ARTF.URL",
@@ -37,12 +37,12 @@
   },
   {
     "atom": "EXEC.SHELL",
-    "confidence": 0.59,
+    "confidence": 0.85,
     "line": null,
     "method": "static-source",
     "path": "setup.py",
     "relationships": [],
-    "rule_id": "regex.EXEC.SHELL"
+    "rule_id": "ast.EXEC.SHELL"
   },
   {
     "atom": "EXEC.SHELL",

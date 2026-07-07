@@ -18,7 +18,7 @@ from unmask.graph.runner import Done, GraphContext, Node
 from unmask.inventory.tree import BINARY_KINDS, build_tree, classify_kind
 from unmask.ledger.store import stable_key
 from unmask.report.augment import augment_json_report, markdown_coverage_appendix
-from unmask.scanner import ParallaxScanner, ScannerUnavailable
+from unmask.scanner.native import NativeScanner
 
 
 def _atomic_write(path: Path, text: str) -> None:
@@ -109,12 +109,11 @@ class ScanAndCompose(Node):
     def run(self, ctx: GraphContext) -> Node:
         d, s = ctx.deps, ctx.state
         try:
-            scanner = ParallaxScanner(scanner_root=d.config.scanner_root)
-            result = scanner.scan(str(s.target_path))
-        except ScannerUnavailable as exc:
-            _fail_op(ctx, "scan-source", str(exc))
-            d.scratch["scanner_error"] = str(exc)
-            d.ledger.event(s.run_id, "ScanAndCompose", "error", {"error": str(exc)})
+            result = NativeScanner().scan(str(s.target_path))
+        except Exception as exc:  # a broken target, not a missing scanner
+            _fail_op(ctx, "scan-source", repr(exc))
+            d.scratch["scanner_error"] = repr(exc)
+            d.ledger.event(s.run_id, "ScanAndCompose", "error", {"error": repr(exc)})
             return CoverageGate()
 
         for o in result.observations:

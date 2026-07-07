@@ -15,7 +15,7 @@
       "mcd"
     ],
     "notes": [
-      "Observation mode: regex-fallback. AST = tree-sitter (high confidence); regex-fallback observations are flagged in their ruleId and summary.",
+      "Observation mode: tree-sitter. AST = tree-sitter (high confidence); regex-fallback observations are flagged in their ruleId and summary.",
       "Experimental prototype. Coverage is source across many languages (JS/TS, Python, Go, Rust, Java, C/C++, C#, Ruby, PHP, shell, PowerShell, and more) via tree-sitter AST with regex fallback, plus npm/PyPI/Cargo/composer manifests. Not covered: compiled binaries and managed bytecode (decompilation track), full dataflow/reachability, runtime behavior.",
       "Severity and confidence are independent. Every finding states what would disprove it.",
       "Runtime verification was not run. Parallax scan/assess is static by default; sandbox execution, branch exploration, and network capture require explicit operator approval and an isolated environment.",
@@ -241,7 +241,26 @@
   },
   "kind": "mcd-assessment",
   "observations": [],
-  "reachability": {},
+  "reachability": {
+    "functions": 3,
+    "note": "Reachability over a best-effort call graph (JS/TS/Python; relative imports resolved). Unresolved edges are computed/dynamic dispatch and unresolved imports; arrow/lambda functions bound to a name are attributed to the enclosing scope.",
+    "reachableSinks": [
+      {
+        "chain": [
+          "loader.py::<module>",
+          "loader.py::fetch"
+        ],
+        "crossFile": false,
+        "entryFile": "loader.py",
+        "file": "loader.py",
+        "function": "fetch",
+        "sinkKinds": [
+          "egress"
+        ]
+      }
+    ],
+    "unresolvedEdges": 0
+  },
   "reviewLeads": [],
   "schemaVersion": "0.1.0",
   "summary": {

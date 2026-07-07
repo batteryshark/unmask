@@ -1,20 +1,20 @@
 [
   {
     "atom": "LOAD.EVAL",
-    "confidence": 0.59,
+    "confidence": 0.85,
     "line": null,
     "method": "static-source",
     "path": "index.js",
     "relationships": [],
-    "rule_id": "regex.LOAD.EVAL"
+    "rule_id": "ast.LOAD.EVAL"
   },
   {
     "atom": "XFRM.ENCODE",
-    "confidence": 0.42,
+    "confidence": 0.6,
     "line": null,
     "method": "static-source",
     "path": "index.js",
     "relationships": [],
-    "rule_id": "regex.XFRM.ENCODE"
+    "rule_id": "ast.XFRM.ENCODE"
   }
 ]

@@ -15,7 +15,7 @@
       "mcd"
     ],
     "notes": [
-      "Observation mode: regex-fallback. AST = tree-sitter (high confidence); regex-fallback observations are flagged in their ruleId and summary.",
+      "Observation mode: tree-sitter. AST = tree-sitter (high confidence); regex-fallback observations are flagged in their ruleId and summary.",
       "Experimental prototype. Coverage is source across many languages (JS/TS, Python, Go, Rust, Java, C/C++, C#, Ruby, PHP, shell, PowerShell, and more) via tree-sitter AST with regex fallback, plus npm/PyPI/Cargo/composer manifests. Not covered: compiled binaries and managed bytecode (decompilation track), full dataflow/reachability, runtime behavior.",
       "Severity and confidence are independent. Every finding states what would disprove it.",
       "Runtime verification was not run. Parallax scan/assess is static by default; sandbox execution, branch exploration, and network capture require explicit operator approval and an isolated environment.",

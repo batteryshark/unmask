@@ -13,8 +13,8 @@
       "No intra-file dataflow path links these observations (they co-occur but the value was not traced source-to-sink); confirm reachability before treating it as a connected path."
     ],
     "evidence": [
-      "obs-2",
-      "obs-1"
+      "obs-1",
+      "obs-2"
     ],
     "id": "mcd-1",
     "lens": "mcd",

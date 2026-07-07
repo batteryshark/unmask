@@ -24,12 +24,12 @@
   },
   {
     "atom": "LOAD.EVAL",
-    "confidence": 0.59,
+    "confidence": 0.85,
     "line": null,
     "method": "static-source",
     "path": "scripts/postinstall.js",
     "relationships": [],
-    "rule_id": "regex.LOAD.EVAL"
+    "rule_id": "ast.LOAD.EVAL"
   },
   {
     "atom": "LOAD.MEMCHAIN",
@@ -42,29 +42,29 @@
   },
   {
     "atom": "NETW.HTTP",
-    "confidence": 0.56,
+    "confidence": 0.8,
     "line": null,
     "method": "static-source",
     "path": "scripts/postinstall.js",
     "relationships": [],
-    "rule_id": "regex.NETW.HTTP"
+    "rule_id": "ast.NETW.HTTP"
   },
   {
     "atom": "XFRM.ENCODE",
-    "confidence": 0.42,
+    "confidence": 0.6,
     "line": null,
     "method": "static-source",
     "path": "scripts/postinstall.js",
     "relationships": [],
-    "rule_id": "regex.XFRM.ENCODE"
+    "rule_id": "ast.XFRM.ENCODE"
   },
   {
     "atom": "XFRM.ENCODE",
-    "confidence": 0.42,
+    "confidence": 0.6,
     "line": null,
     "method": "static-source",
     "path": "scripts/postinstall.js",
     "relationships": [],
-    "rule_id": "regex.XFRM.ENCODE"
+    "rule_id": "ast.XFRM.ENCODE"
   }
 ]

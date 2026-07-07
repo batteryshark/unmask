@@ -29,26 +29,13 @@ CORPUS = [
 
 
 def _active_scan(target: str):
-    """Run the currently-active scanner backend. Repoint here when the native
-    scanner replaces the transitional vendored one."""
-    from unmask.scanner import ParallaxScanner
-    return ParallaxScanner().scan(target)
+    """Run the active (native) scanner backend."""
+    from unmask.scanner.native import NativeScanner
+    return NativeScanner().scan(target)
 
 
 def _golden(name: str, part: str):
     return json.loads((GOLDEN / name / f"{part}.json").read_text(encoding="utf-8"))
-
-
-def _scanner_available() -> bool:
-    try:
-        from unmask.scanner import ParallaxScanner
-        ParallaxScanner()
-        return True
-    except Exception:
-        return False
-
-
-pytestmark = pytest.mark.skipif(not _scanner_available(), reason="scanner backend unavailable")
 
 
 @pytest.mark.parametrize("name,target", CORPUS, ids=[c[0] for c in CORPUS])

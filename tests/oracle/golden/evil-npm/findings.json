@@ -13,8 +13,8 @@
     ],
     "evidence": [
       "obs-1",
-      "obs-3",
-      "obs-4"
+      "obs-2",
+      "obs-3"
     ],
     "id": "mcd-1",
     "lens": "mcd",
@@ -60,8 +60,8 @@
       "No intra-file dataflow path links these observations (they co-occur but the value was not traced source-to-sink); confirm reachability before treating it as a connected path."
     ],
     "evidence": [
+      "obs-3",
       "obs-4",
-      "obs-2",
       "obs-5"
     ],
     "id": "mcd-2",
@@ -104,9 +104,9 @@
       "No control-flow or dataflow path links these observations; they co-occur in one file or component but are not reachable from one another."
     ],
     "evidence": [
+      "obs-2",
       "obs-3",
       "obs-4",
-      "obs-2",
       "obs-5"
     ],
     "id": "mcd-3",
@@ -149,8 +149,8 @@
       "No control-flow or dataflow path links these observations; they co-occur in one file or component but are not reachable from one another."
     ],
     "evidence": [
-      "obs-4",
-      "obs-3"
+      "obs-3",
+      "obs-2"
     ],
     "id": "mcd-4",
     "lens": "mcd",

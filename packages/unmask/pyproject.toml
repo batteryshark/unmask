@@ -12,12 +12,15 @@ license = "Apache-2.0"
 authors = [{ name = "Mario Mercaldi" }]
 keywords = ["security", "malware", "static-analysis", "supply-chain", "mcd"]
 
-# Core stays deliberately light so persona 1 ("I'm about to run this — is it
-# suspicious?") installs fast. No lief/capstone/tree-sitter/decompilers here;
-# those live in the optional `unmask-re` wheel.
+# Core carries the scanning substrate. tree-sitter-language-pack (~5M, prebuilt
+# wheels, self-contained/offline, no compiler) drives AST callee extraction — the
+# accurate default path; a regex fallback keeps the tool working where the grammar
+# wheel can't install. Heavy RE deps (lief/capstone/decompilers) stay in unmask-re.
 dependencies = [
     "pydantic>=2.7",
     "pydantic-graph>=0.0.1",
+    "tree-sitter>=0.23",
+    "tree-sitter-language-pack>=1.0",
 ]
 
 [project.optional-dependencies]

@@ -25,9 +25,9 @@
       ],
       "evidence": [
         "obs-1",
+        "obs-2",
         "obs-3",
         "obs-4",
-        "obs-2",
         "obs-5"
       ],
       "id": "corr-1",
@@ -57,7 +57,7 @@
       "mcd"
     ],
     "notes": [
-      "Observation mode: regex-fallback. AST = tree-sitter (high confidence); regex-fallback observations are flagged in their ruleId and summary.",
+      "Observation mode: tree-sitter. AST = tree-sitter (high confidence); regex-fallback observations are flagged in their ruleId and summary.",
       "Experimental prototype. Coverage is source across many languages (JS/TS, Python, Go, Rust, Java, C/C++, C#, Ruby, PHP, shell, PowerShell, and more) via tree-sitter AST with regex fallback, plus npm/PyPI/Cargo/composer manifests. Not covered: compiled binaries and managed bytecode (decompilation track), full dataflow/reachability, runtime behavior.",
       "Severity and confidence are independent. Every finding states what would disprove it.",
       "Runtime verification was not run. Parallax scan/assess is static by default; sandbox execution, branch exploration, and network capture require explicit operator approval and an isolated environment.",
@@ -319,8 +319,8 @@
       ],
       "evidence": [
         "obs-1",
-        "obs-3",
-        "obs-4"
+        "obs-2",
+        "obs-3"
       ],
       "id": "mcd-1",
       "lens": "mcd",
@@ -374,8 +374,8 @@
         }
       ],
       "evidence": [
+        "obs-3",
         "obs-4",
-        "obs-2",
         "obs-5"
       ],
       "id": "mcd-2",
@@ -426,9 +426,9 @@
         }
       ],
       "evidence": [
+        "obs-2",
         "obs-3",
         "obs-4",
-        "obs-2",
         "obs-5"
       ],
       "id": "mcd-3",
@@ -479,8 +479,8 @@
         }
       ],
       "evidence": [
-        "obs-4",
-        "obs-3"
+        "obs-3",
+        "obs-2"
       ],
       "id": "mcd-4",
       "lens": "mcd",
@@ -546,19 +546,19 @@
     },
     {
       "atom": "NETW.HTTP",
-      "confidence": 0.56,
+      "confidence": 0.8,
       "evidence": {
         "matchedText": "https.get(",
-        "summary": "outbound HTTP request via https.get() (regex fallback, no AST)"
+        "summary": "outbound HTTP request via https.get()"
       },
-      "id": "obs-3",
+      "id": "obs-2",
       "location": {
         "path": "scripts/postinstall.js",
         "startLine": 5
       },
       "method": "static-source",
       "provenance": {
-        "ruleId": "regex.NETW.HTTP",
+        "ruleId": "ast.NETW.HTTP",
         "scanner": "prlx",
         "scannerVersion": "0.1.0",
         "timestamp": "\u00abts\u00bb"
@@ -567,10 +567,31 @@
     },
     {
       "atom": "LOAD.EVAL",
-      "confidence": 0.59,
+      "confidence": 0.85,
       "evidence": {
         "matchedText": "eval(",
-        "summary": "dynamic code evaluation via eval() (regex fallback, no AST)"
+        "summary": "dynamic code evaluation via eval()"
+      },
+      "id": "obs-3",
+      "location": {
+        "path": "scripts/postinstall.js",
+        "startLine": 8
+      },
+      "method": "static-source",
+      "provenance": {
+        "ruleId": "ast.LOAD.EVAL",
+        "scanner": "prlx",
+        "scannerVersion": "0.1.0",
+        "timestamp": "\u00abts\u00bb"
+      },
+      "relationships": []
+    },
+    {
+      "atom": "XFRM.ENCODE",
+      "confidence": 0.6,
+      "evidence": {
+        "matchedText": "Buffer.from(",
+        "summary": "base64/buffer decode via Buffer.from()"
       },
       "id": "obs-4",
       "location": {
@@ -579,7 +600,7 @@
       },
       "method": "static-source",
       "provenance": {
-        "ruleId": "regex.LOAD.EVAL",
+        "ruleId": "ast.XFRM.ENCODE",
         "scanner": "prlx",
         "scannerVersion": "0.1.0",
         "timestamp": "\u00abts\u00bb"
@@ -588,40 +609,19 @@
     },
     {
       "atom": "XFRM.ENCODE",
-      "confidence": 0.42,
+      "confidence": 0.6,
       "evidence": {
         "matchedText": "Buffer.from(",
-        "summary": "base64/buffer decode via Buffer.from() (regex fallback, no AST)"
+        "summary": "base64/buffer decode via Buffer.from()"
       },
-      "id": "obs-2",
+      "id": "obs-5",
       "location": {
         "path": "scripts/postinstall.js",
         "startLine": 4
       },
       "method": "static-source",
       "provenance": {
-        "ruleId": "regex.XFRM.ENCODE",
-        "scanner": "prlx",
-        "scannerVersion": "0.1.0",
-        "timestamp": "\u00abts\u00bb"
-      },
-      "relationships": []
-    },
-    {
-      "atom": "XFRM.ENCODE",
-      "confidence": 0.42,
-      "evidence": {
-        "matchedText": "Buffer.from(",
-        "summary": "base64/buffer decode via Buffer.from() (regex fallback, no AST)"
-      },
-      "id": "obs-5",
-      "location": {
-        "path": "scripts/postinstall.js",
-        "startLine": 8
-      },
-      "method": "static-source",
-      "provenance": {
-        "ruleId": "regex.XFRM.ENCODE",
+        "ruleId": "ast.XFRM.ENCODE",
         "scanner": "prlx",
         "scannerVersion": "0.1.0",
         "timestamp": "\u00abts\u00bb"

@@ -1,7 +1,7 @@
 {
   "schemaVersion": "0.1.0",
   "taxonomyId": "parallax-taxonomy",
-  "sourceGitCommit": "7daa086c53f9bb0cd2ee7c90c25db1bc961d1bff",
+  "sourceGitCommit": "2d0a045d1bff6b349271e81ae03bcf41dd12ce46",
   "includedRoots": [
     "signatures",
     "reference"
@@ -73,11 +73,11 @@
     },
     {
       "path": "signatures/packs/source-callees.json",
-      "sha256": "f58b7d2bfe9df22fb2703f5a1a3cf07c0d25c2705dbdb260591e1602aa1389c2"
+      "sha256": "ed0d9cf732060120d1a363a8549b220f3db3d116b0c19dbcf342e830b052bca9"
     },
     {
       "path": "signatures/packs/source-callees.yaml",
-      "sha256": "0791e1a412123c9b2e38a1cae364f2146c19881024ba12c047145f8666e9f156"
+      "sha256": "678e63c25566207ec562c8a0aff0342843b76478a3ed31c259692e8e634c0d35"
     },
     {
       "path": "signatures/schema.json",

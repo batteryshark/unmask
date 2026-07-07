@@ -28,6 +28,33 @@ weaken the assertion. Known divergence candidates already visible:
   **clear/0 findings**: bare install-time exec is routed to the capability lens,
   not claimed as malice. Revisit whether MCD should flag this.
 
+## Taxonomy completeness — the real gap
+
+Slice 2 surfaced the pivotal finding: the vendored packs are an **incomplete
+migration** of what the reference engines detect. The engines (both goalpacks and
+`parallax/prlx`) still emit atoms from hardcoded `rules.py` regexes, legacy callee
+tables, and manifest/supply algorithms that never made it into pack data. So a
+purely pack-driven scanner under-detects until the gap is closed. The gap splits
+in two:
+
+* **Data-shaped → belongs in the packs.** Callee/content classifications that are
+  just data. Fix by adding to `parallax-taxonomy` (authorized). First contribution:
+  `sig.load.eval.python.dynamic-exec` — python `exec`/`compile` now classify as
+  `LOAD.EVAL` (code execution) instead of the universal `EXEC.PROC` (posix process
+  exec), exact-match to avoid `re.compile` false positives. Closed py-curlpipe's
+  callee gap. Edit the `.yaml` source + regenerate the `.json` (Ruby
+  `scripts/build-signature-json`; note: system Ruby 2.6's strict Psych rejects the
+  pack — needs a newer Ruby, or hand-sync the json as done here) + re-vendor.
+* **Algorithm-shaped → must be native code.** Not signatures: `manifest.npm.lifecycle`
+  / `manifest.pypi.setup` (PKGM.INSTALL), `supply.undeclared` (PKGM.UNDECLARED),
+  and arg-inspecting detections like `Buffer.from(x,'base64')` → XFRM.ENCODE.
+  Reimplement cleanly in `unmask/scanner/observe/` (manifest + supply passes).
+
+**Oracle coupling:** goalpacks reads the *live* sibling `parallax-taxonomy`, so a
+pack edit shifts the reference too. After any authorized pack change, re-run
+`tests/oracle/capture.py` and confirm atoms/counts are unchanged (improvement) or
+explained. The exec fix left all corpus atom-sets and counts identical.
+
 ## Target architecture
 
 ```
@@ -59,9 +86,37 @@ Design principles carried over from the taxonomy/engine split:
    reader/matcher (callee / content / import surfaces) consuming the vendored
    packs. Callee classification is **parity-locked** to the reference matcher:
    5644/5644 candidate `(callee, lang)` pairs agree (`tests/test_signatures.py`).
-2. **Source observe** — walk + inventory + extract source callees and content
-   matches → atoms with confidence/method/location/evidence. The callee extraction
-   (tree-sitter or a disciplined fallback) is the big piece.
+2. **Source observe** — ✅ DONE. `observe(target)` assembles four passes and reaches
+   **no under-detection across the whole corpus** (`tests/test_observe.py` gates it):
+   - `observe/inventory.py` — data-driven walk + classify (from
+     `reference/file-classification.json`; no hardcoded tables).
+   - `observe/content.py` — content-atom extraction via the slice-1 matcher.
+   - `observe/callee.py` — **AST** call extraction (tree-sitter, core dep) with a
+     regex fallback, behind one `extract_calls` interface → `classify_callee`.
+   - `observe/manifest.py` — `package.json` lifecycle + `setup.py` → PKGM.INSTALL
+     with the `manifest-entrypoint` relationship BP-SUPPLY needs.
+   - `observe/supply.py` — phantom/undeclared imports → PKGM.UNDECLARED
+     (ecosystem-scoped stdlib check, from `reference/standard-libraries`).
+   - Two pack contributions closed the data-shaped gaps: `sig.load.eval.python`
+     (exec/compile→LOAD.EVAL) and `sig.xfrm.encode.base64` (base64/buffer→XFRM.ENCODE).
+     PKGM.* remained algorithm-shaped → native manifest/supply passes.
+   - Not yet wired into `mcd run` (the transitional `_vendor` backend still serves the
+     graph); cut over happens after the compose slice reproduces the BP-* readings.
+3. **Compose** — ✅ DONE. `unmask/scanner/compose/` (all 16 BP-* compositions, clean;
+   `inventory.purpose` for BP-TROJAN). `tests/test_compose.py` confirms native compose
+   over native observe reproduces the oracle findings' composition/severity/confidence
+   exactly (evil-npm → BP-SUPPLY/OBFEXEC/BACKDOOR/TROJAN; obf-js → BP-OBFEXEC; else none).
+4. **Assess + report** — ✅ DONE. `unmask/scanner/assess/` — deterministic disposition
+   (clear/review/quarantine, severity⊥confidence), correlations, coverage, executive
+   summary (`tests/test_assess.py` gates disposition + summary vs oracle), plus a clean
+   native renderer (json/md/self-contained html — a rebuild, not the 920-line port).
+   `NativeScanner` (`scanner/native.py`) wires observe→compose→assess→render behind the
+   `Scanner` protocol, and `mcd run` is cut over to it.
+5. **`_vendor` deleted.** The transitional engine+mcd_lens copy and the ParallaxScanner
+   adapter are gone; the scanner is 100% native `unmask.scanner`. The slice-1 parity is
+   frozen to `tests/fixtures/callee_parity_map.json` (5756 entries) and the oracle gate
+   now measures the native scanner. `taxonomy/vendored/` (packs + reference data) stays —
+   that is the detection knowledge, not engine code.
 3. **Compose** — atoms → BP-\* findings (BP-SUPPLY / BP-OBFEXEC / BP-DROPPER /
    BP-BACKDOOR / BP-TROJAN / …). This is `mcd_lens.readings` rebuilt clean.
 4. **Assess + report** — disposition, correlation, coverage, and html/md/json
@@ -69,14 +124,13 @@ Design principles carried over from the taxonomy/engine split:
 5. **Binary / dataflow / supply / enrichment** — later, and binary work belongs to
    `unmask-re` (persona 2), not core.
 
-## Transitional state (today)
+## Runtime state (native)
 
-- `_vendor/{engine,mcd_lens}` — the old engine, **vendored into the wheel** so the
-  tool is self-contained (no external ROOT). This is the temporary backend behind
-  `unmask.scanner.ParallaxScanner`; it is deleted at the end of slice 4.
-- `taxonomy/vendored/` — allowlisted parallax-taxonomy + `taxonomy-manifest.json`
-  (source commit pinned). Consumed by the transitional engine now (via
-  `PRLX_TAXONOMY_ROOT` set to the bundled copy) and by native slices next.
+- `_vendor/{engine,mcd_lens}` — **deleted.** The scanner is fully native
+  `unmask.scanner` (`NativeScanner`); there is no old-engine code left in the wheel.
+- `taxonomy/vendored/` — allowlisted parallax-taxonomy (packs + reference) +
+  `taxonomy-manifest.json` (source commit pinned). This is the detection *data* the
+  native scanner reads; it stays.
 - Re-vendor via `packages/unmask/scripts/vendor.py` (`--check` fails CI when the
   vendored copy is stale). The code copy is a one-time bootstrap; the taxonomy
   copy is refreshed from the `parallax` repo.

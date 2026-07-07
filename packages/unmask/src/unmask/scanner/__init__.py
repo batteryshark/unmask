@@ -9,6 +9,6 @@ replace the path-resolved checkout with no node changes.
 from __future__ import annotations
 
 from unmask.scanner.base import ScannerUnavailable, ScanResult
-from unmask.scanner.parallax_adapter import ParallaxScanner
+from unmask.scanner.native import NativeScanner
 
-__all__ = ["ParallaxScanner", "ScanResult", "ScannerUnavailable"]
+__all__ = ["NativeScanner", "ScanResult", "ScannerUnavailable"]

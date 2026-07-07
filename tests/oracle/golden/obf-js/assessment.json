@@ -15,7 +15,7 @@
       "mcd"
     ],
     "notes": [
-      "Observation mode: regex-fallback. AST = tree-sitter (high confidence); regex-fallback observations are flagged in their ruleId and summary.",
+      "Observation mode: tree-sitter. AST = tree-sitter (high confidence); regex-fallback observations are flagged in their ruleId and summary.",
       "Experimental prototype. Coverage is source across many languages (JS/TS, Python, Go, Rust, Java, C/C++, C#, Ruby, PHP, shell, PowerShell, and more) via tree-sitter AST with regex fallback, plus npm/PyPI/Cargo/composer manifests. Not covered: compiled binaries and managed bytecode (decompilation track), full dataflow/reachability, runtime behavior.",
       "Severity and confidence are independent. Every finding states what would disprove it.",
       "Runtime verification was not run. Parallax scan/assess is static by default; sandbox execution, branch exploration, and network capture require explicit operator approval and an isolated environment.",
@@ -197,8 +197,8 @@
         "No intra-file dataflow path links these observations (they co-occur but the value was not traced source-to-sink); confirm reachability before treating it as a connected path."
       ],
       "evidence": [
-        "obs-2",
-        "obs-1"
+        "obs-1",
+        "obs-2"
       ],
       "id": "mcd-1",
       "lens": "mcd",
@@ -238,19 +238,19 @@
   "observations": [
     {
       "atom": "LOAD.EVAL",
-      "confidence": 0.59,
+      "confidence": 0.85,
       "evidence": {
         "matchedText": "eval(",
-        "summary": "dynamic code evaluation via eval() (regex fallback, no AST)"
+        "summary": "dynamic code evaluation via eval()"
       },
-      "id": "obs-2",
+      "id": "obs-1",
       "location": {
         "path": "index.js",
         "startLine": 4
       },
       "method": "static-source",
       "provenance": {
-        "ruleId": "regex.LOAD.EVAL",
+        "ruleId": "ast.LOAD.EVAL",
         "scanner": "prlx",
         "scannerVersion": "0.1.0",
         "timestamp": "\u00abts\u00bb"
@@ -259,19 +259,19 @@
     },
     {
       "atom": "XFRM.ENCODE",
-      "confidence": 0.42,
+      "confidence": 0.6,
       "evidence": {
         "matchedText": "Buffer.from(",
-        "summary": "base64/buffer decode via Buffer.from() (regex fallback, no AST)"
+        "summary": "base64/buffer decode via Buffer.from()"
       },
-      "id": "obs-1",
+      "id": "obs-2",
       "location": {
         "path": "index.js",
         "startLine": 2
       },
       "method": "static-source",
       "provenance": {
-        "ruleId": "regex.XFRM.ENCODE",
+        "ruleId": "ast.XFRM.ENCODE",
         "scanner": "prlx",
         "scannerVersion": "0.1.0",
         "timestamp": "\u00abts\u00bb"
