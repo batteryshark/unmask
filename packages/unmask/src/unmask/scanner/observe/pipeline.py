@@ -9,6 +9,7 @@ unmask-re). Judgment-free: no BP-* interpretation here — that is the compose s
 
 from __future__ import annotations
 
+from unmask.scanner.observe import callgraph, dataflow
 from unmask.scanner.observe.atoms import Observation
 from unmask.scanner.observe.callee import observe_callee
 from unmask.scanner.observe.content import observe_content
@@ -16,6 +17,11 @@ from unmask.scanner.observe.inventory import Inventory, build_inventory
 from unmask.scanner.observe.manifest import observe_manifest
 from unmask.scanner.observe.supply import observe_supply
 from unmask.scanner.signatures import Signatures
+
+# Atom families whose findings dataflow can prove a path for (dropper / exfil /
+# decode-exec / ransom / propagation / mitm); only files carrying one of these
+# are worth an intra-file taint pass.
+_DATAFLOW_FAMILIES = ("NETW", "CRED", "EXEC", "LOAD", "FSYS", "XFRM")
 
 
 def observe(target: str, sigs: Signatures | None = None) -> tuple[list[Observation], Inventory]:
@@ -39,4 +45,13 @@ def observe(target: str, sigs: Signatures | None = None) -> tuple[list[Observati
         deduped.append(o)
     for i, o in enumerate(deduped, start=1):
         o.id = f"obs-{i}"
+
+    # Native dataflow + reachability. Intra-file taint runs only on files that
+    # carry a dataflow-relevant atom (a payload family); reachability spans the
+    # whole package's JS/TS/Python call graph. The compose layer consumes these
+    # to upgrade same-file co-occurrence to a proven path.
+    relevant = {o.path for o in deduped
+                if (o.atom or "").split(".")[0] in _DATAFLOW_FAMILIES}
+    inv.dataflow = dataflow.analyze_inventory(inv, only_paths=relevant)
+    inv.reachability = callgraph.analyze(inv)
     return deduped, inv

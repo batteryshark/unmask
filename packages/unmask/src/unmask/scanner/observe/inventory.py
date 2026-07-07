@@ -36,6 +36,10 @@ class Inventory:
     # Lowercased manifest/README description — a weak "stated purpose" signal used
     # by BP-TROJAN (behavior that doesn't match what the package claims to be).
     purpose: str = ""
+    # Intra-file taint results: {relpath: [proven-path dicts]} (see observe.dataflow).
+    dataflow: dict = field(default_factory=dict)
+    # Cross-file reachability: {"reachableSinks": [...], ...} (see observe.callgraph).
+    reachability: dict = field(default_factory=dict)
 
     def scannable(self) -> list[FileEntry]:
         return [f for f in self.files if f.kind in _SCANNABLE]
