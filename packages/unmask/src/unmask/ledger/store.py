@@ -194,6 +194,27 @@ class LedgerStore:
         cur = self.conn.execute("select count(*) c from findings where run_id=?", (run_id,))
         return cur.fetchone()["c"]
 
+    # --- judgments (agentic review) --------------------------------------
+    def record_judgment(self, run_id: str, review, *, reviewer="agentic", model=None) -> str:
+        """Persist a FindingReview as a durable judgment row."""
+        jid = new_id("judg")
+        self.conn.execute(
+            """insert into judgments
+               (id, run_id, finding_id, reviewer, model, verdict, reviewed_confidence,
+                response_tier, excluded_from_disposition, justification, followups_json, created_at)
+               values (?,?,?,?,?,?,?,?,?,?,?,?)""",
+            (jid, run_id, review.finding_id, reviewer, model, review.verdict,
+             review.reviewed_confidence, review.response_tier,
+             1 if review.excluded_from_disposition else 0, review.justification,
+             json.dumps([f.model_dump() for f in review.followups]), _now()),
+        )
+        self.conn.commit()
+        return jid
+
+    def count_judgments(self, run_id: str) -> int:
+        cur = self.conn.execute("select count(*) c from judgments where run_id=?", (run_id,))
+        return cur.fetchone()["c"]
+
     # --- events / reports -------------------------------------------------
     def event(self, run_id: str, node: str, event: str, payload: dict | None = None) -> None:
         self.conn.execute(

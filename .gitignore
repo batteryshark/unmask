@@ -20,3 +20,6 @@ dist/
 
 # Vendored scanner / taxonomy get committed once the vendor step exists;
 # until then they resolve from a sibling parallax checkout via env/config.
+
+# Agent worktrees (temporary; separate git repos)
+.claude/worktrees/

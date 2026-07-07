@@ -109,6 +109,22 @@ create table if not exists findings (
 );
 create index if not exists idx_findings_run on findings(run_id);
 
+create table if not exists judgments (
+    id                        text primary key,
+    run_id                    text not null,
+    finding_id                text,
+    reviewer                  text not null,
+    model                     text,
+    verdict                   text not null,       -- confirm|escalate|deescalate|refute|suppress|needs_evidence|needs_human
+    reviewed_confidence       real,
+    response_tier             integer,
+    excluded_from_disposition integer not null default 0,
+    justification             text not null,
+    followups_json            text,
+    created_at                text not null
+);
+create index if not exists idx_judgments_run on judgments(run_id);
+
 create table if not exists graph_events (
     id           text primary key,
     run_id       text not null,
