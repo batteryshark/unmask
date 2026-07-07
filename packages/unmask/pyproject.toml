@@ -26,9 +26,12 @@ dependencies = [
 [project.optional-dependencies]
 # Agentic adjudication overlay (bounded, typed review of findings).
 review = ["pydantic-ai>=0.0.1"]
+# Model Context Protocol server: expose scan/resume/report to agents.
+mcp = ["mcp>=1.0.0"]
 
 [project.scripts]
 mcd = "unmask.cli:main"
+unmask-mcp = "unmask.mcp_server:main"
 
 [project.urls]
 Homepage = "https://github.com/batteryshark/mcd"

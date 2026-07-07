@@ -100,6 +100,12 @@ def _cmd_resume(args: argparse.Namespace) -> int:
     return 0 if result.status == "completed" else 1
 
 
+def _cmd_mcp(args: argparse.Namespace) -> int:
+    from unmask.mcp_server import main as mcp_main
+
+    return mcp_main()
+
+
 def _cmd_status(args: argparse.Namespace) -> int:
     from unmask.run import status_of
 
@@ -177,6 +183,9 @@ def build_parser() -> argparse.ArgumentParser:
     res.add_argument("--run-dir", required=True)
     res.add_argument("--json", action="store_true")
     res.set_defaults(func=_cmd_resume)
+
+    mcp = sub.add_parser("mcp", help="run the MCP server (stdio) exposing scan/resume/report")
+    mcp.set_defaults(func=_cmd_mcp)
 
     st = sub.add_parser("status", help="run status from run.json")
     st.add_argument("--run-dir", required=True)
