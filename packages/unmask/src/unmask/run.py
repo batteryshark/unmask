@@ -7,8 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from unmask.config import MCDConfig
-from unmask.graph import InitializeRun, MCDGraphDeps, MCDGraphState, run_graph
-from unmask.graph.runner import GraphContext
+from unmask.graph import InitializeRun, MCDGraphDeps, MCDGraphState, build_graph
 from unmask.ledger import LedgerStore
 from unmask.providers import discover_providers
 from unmask.storage.paths import (
@@ -53,9 +52,9 @@ def run_mcd(target: str, config: MCDConfig | None = None, *, review_model=None) 
     )
     deps = MCDGraphDeps(ledger=ledger, config=config, paths=paths, toolchain=toolchain,
                         review_model=review_model)
-    ctx = GraphContext(state=state, deps=deps)
+    graph = build_graph()
     try:
-        result = run_graph(InitializeRun(), ctx)
+        result = graph.run_sync(inputs=InitializeRun(), state=state, deps=deps)
     except Exception as exc:
         ledger.finish_run(run_id, "failed", error=repr(exc))
         raise

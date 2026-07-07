@@ -1,24 +1,35 @@
-"""Phase nodes for the first build cut.
+"""Phase nodes, driven by pydantic-graph.
 
-    InitializeRun -> InventoryTarget -> ScanAndCompose -> CoverageGate -> RenderReport -> Done
+    InitializeRun -> InventoryTarget -> ScanAndCompose -> ReviewFindings
+      -> CoverageGate -> RenderReport -> End
 
-Faithful to docs/design.md's node responsibilities, collapsed where the first
-cut doesn't yet branch (StaticScan + ComposeFindings run as one adapter call;
-ExpandContainers / Decompile / ReviewBatch / NetworkFetch arrive in later
-milestones as extra queued work the CoverageGate loops over).
+Each node is a `BaseNode` whose `run()` returns the next node (or `End`); the
+`GraphBuilder` infers the edges from the return annotations. The graph controls
+phases; the SQLite ledger — not the graph — is the coverage/resume oracle.
+
+Node bodies are synchronous work (ledger, scanner, file I/O). The two agentic
+steps call a reviewer that uses `run_sync`, which cannot run inside the graph's
+event loop, so those calls are offloaded with `asyncio.to_thread`.
 """
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
+from dataclasses import dataclass
+from functools import partial
 from pathlib import Path
 
-from unmask.graph.runner import Done, GraphContext, Node
+from pydantic_graph import BaseNode, End, Graph, GraphBuilder, GraphRunContext
+
+from unmask.graph.runner import MCDGraphDeps, MCDGraphState
 from unmask.inventory.tree import BINARY_KINDS, build_tree, classify_kind
 from unmask.ledger.store import stable_key
 from unmask.report.augment import augment_json_report, markdown_coverage_appendix
 from unmask.scanner.native import NativeScanner
+
+_Ctx = GraphRunContext[MCDGraphState, MCDGraphDeps]
 
 
 def _atomic_write(path: Path, text: str) -> None:
@@ -27,9 +38,16 @@ def _atomic_write(path: Path, text: str) -> None:
     os.replace(tmp, path)
 
 
-class InitializeRun(Node):
-    def run(self, ctx: GraphContext) -> Node:
+def _enter(ctx: _Ctx, name: str) -> None:
+    ctx.state.iteration += 1
+    ctx.deps.ledger.event(ctx.state.run_id, name, "enter")
+
+
+@dataclass
+class InitializeRun(BaseNode[MCDGraphState, MCDGraphDeps, dict]):
+    async def run(self, ctx: _Ctx) -> "InventoryTarget":
         d, s = ctx.deps, ctx.state
+        _enter(ctx, "InitializeRun")
         _write_run_json(ctx, status="running")
         d.ledger.enqueue(
             run_id=s.run_id, key=stable_key(str(s.target_path), "inventory"),
@@ -41,9 +59,11 @@ class InitializeRun(Node):
         return InventoryTarget()
 
 
-class InventoryTarget(Node):
-    def run(self, ctx: GraphContext) -> Node:
+@dataclass
+class InventoryTarget(BaseNode[MCDGraphState, MCDGraphDeps, dict]):
+    async def run(self, ctx: _Ctx) -> "ScanAndCompose":
         d, s = ctx.deps, ctx.state
+        _enter(ctx, "InventoryTarget")
         cfg = d.config
         tree = build_tree(
             s.target_path, max_depth=cfg.tree_max_depth,
@@ -76,15 +96,12 @@ class InventoryTarget(Node):
                 payload={"artifactId": art_id, "kind": kind},
             )
             if not has_re:
-                # Skill-layer blind spot: no RE provider at all.
                 d.ledger.set_work_status(
                     wid, "blocked",
                     error="No RE provider installed (install unmask-re); binary not "
                           "deeply analysed. Reported as a coverage blind spot.",
                 )
             else:
-                # RE provider present but real decompilation is a later milestone;
-                # be honest — defer, don't leave it silently queued forever.
                 d.ledger.set_work_status(
                     wid, "deferred",
                     result={"note": "RE provider present; deep binary analysis is a "
@@ -92,24 +109,24 @@ class InventoryTarget(Node):
                                     "yet decompiled."},
                 )
 
-        # Enqueue and immediately drive the source scan.
         d.ledger.enqueue(
             run_id=s.run_id, key=stable_key(str(s.target_path), "scan-source"),
             target=str(s.target_path), operation="scan-source", category="source",
-            title="Static source scan (engine + mcd_lens)", priority=20,
+            title="Native source scan", priority=20,
         )
-        # Close the inventory work item.
         _mark_op_done(ctx, "inventory")
         d.ledger.event(s.run_id, "InventoryTarget", "note",
                        {"binaryArtifacts": len(tree.binary_paths), "reInstalled": has_re})
         return ScanAndCompose()
 
 
-class ScanAndCompose(Node):
-    def run(self, ctx: GraphContext) -> Node:
+@dataclass
+class ScanAndCompose(BaseNode[MCDGraphState, MCDGraphDeps, dict]):
+    async def run(self, ctx: _Ctx) -> "ReviewFindings | CoverageGate":
         d, s = ctx.deps, ctx.state
+        _enter(ctx, "ScanAndCompose")
         try:
-            result = NativeScanner().scan(str(s.target_path))
+            result = await asyncio.to_thread(NativeScanner().scan, str(s.target_path))
         except Exception as exc:  # a broken target, not a missing scanner
             _fail_op(ctx, "scan-source", repr(exc))
             d.scratch["scanner_error"] = repr(exc)
@@ -142,14 +159,16 @@ class ScanAndCompose(Node):
         return ReviewFindings()
 
 
-class ReviewFindings(Node):
+@dataclass
+class ReviewFindings(BaseNode[MCDGraphState, MCDGraphDeps, dict]):
     """Optional agentic adjudication. A reviewer reads each finding's evidence and
     the overlay recomputes a *reviewed* disposition (the model judges; the rule,
     not the model, sets disposition). Off unless config.review; a missing or failed
     model is an honest coverage note, never a hard stop. Judgments persist."""
 
-    def run(self, ctx: GraphContext) -> Node:
+    async def run(self, ctx: _Ctx) -> "CoverageGate":
         d, s = ctx.deps, ctx.state
+        _enter(ctx, "ReviewFindings")
         scan = d.scratch.get("scan")
         if not d.config.review or scan is None or not scan.findings:
             return CoverageGate()
@@ -164,7 +183,7 @@ class ReviewFindings(Node):
             return CoverageGate()
 
         assessment = scan.assessment
-        reviews, overlay = review_assessment(assessment, model=model)
+        reviews, overlay = await asyncio.to_thread(partial(review_assessment, assessment, model=model))
         d.scratch["reviews"] = reviews  # for post-report rule-tuning QA
         model_name = getattr(d.config, "model", None) or type(model).__name__
         for r in reviews:
@@ -180,11 +199,13 @@ class ReviewFindings(Node):
         return CoverageGate()
 
 
-class CoverageGate(Node):
+@dataclass
+class CoverageGate(BaseNode[MCDGraphState, MCDGraphDeps, dict]):
     """Decide the next phase from ledger state, not model output."""
 
-    def run(self, ctx: GraphContext) -> Node:
+    async def run(self, ctx: _Ctx) -> "RenderReport":
         d, s = ctx.deps, ctx.state
+        _enter(ctx, "CoverageGate")
         actionable = d.ledger.actionable_count(s.run_id)
         d.ledger.event(s.run_id, "CoverageGate", "note",
                        {"actionable": actionable, "coverage": d.ledger.coverage(s.run_id)})
@@ -193,9 +214,11 @@ class CoverageGate(Node):
         return RenderReport()
 
 
-class RenderReport(Node):
-    def run(self, ctx: GraphContext) -> Done:
+@dataclass
+class RenderReport(BaseNode[MCDGraphState, MCDGraphDeps, dict]):
+    async def run(self, ctx: _Ctx) -> End[dict]:
         d, s = ctx.deps, ctx.state
+        _enter(ctx, "RenderReport")
         coverage = d.ledger.coverage(s.run_id)
         scan = d.scratch.get("scan")
         tree = d.scratch.get("tree")
@@ -252,7 +275,7 @@ class RenderReport(Node):
         # Post-report rule-tuning QA — advisory engineering feedback, only when the
         # findings were reviewed (it clusters what review knocked down).
         if scan is not None and d.config.post_report_qa != "off" and d.scratch.get("reviews"):
-            _post_report_qa(ctx, scan.assessment, d.scratch["reviews"], reports_dir)
+            await _post_report_qa(ctx, scan.assessment, d.scratch["reviews"], reports_dir)
 
         status = "completed" if scan is not None else "partial"
         summary = {"disposition": disposition, "findingCount": finding_count,
@@ -261,7 +284,7 @@ class RenderReport(Node):
         _write_run_json(ctx, status=status, disposition=disposition)
         d.ledger.event(s.run_id, "RenderReport", "note", summary)
 
-        return Done({
+        return End({
             "runId": s.run_id, "projectId": s.project_id, "runDir": str(s.run_dir),
             "status": status, "disposition": disposition, "findingCount": finding_count,
             "blockedBinaries": blocked_binaries,
@@ -271,32 +294,49 @@ class RenderReport(Node):
         })
 
 
+def build_graph() -> Graph:
+    """Assemble the phase graph. Rebuilt cheaply per run; nodes are stateless."""
+    g = GraphBuilder(name="mcd", state_type=MCDGraphState, deps_type=MCDGraphDeps,
+                     input_type=InitializeRun, output_type=dict)
+    g.add(
+        g.edge_from(g.start_node).to(InitializeRun),
+        g.node(InitializeRun),
+        g.node(InventoryTarget),
+        g.node(ScanAndCompose),
+        g.node(ReviewFindings),
+        g.node(CoverageGate),
+        g.node(RenderReport),
+    )
+    return g.build()
+
+
 # --- helpers ---------------------------------------------------------------
 
-def _work_id_for_op(ctx: GraphContext, operation: str) -> str | None:
+def _work_id_for_op(ctx: _Ctx, operation: str) -> str | None:
     row = ctx.deps.ledger.conn.execute(
         "select id from work_items where run_id=? and operation=? order by created_at limit 1",
         (ctx.state.run_id, operation)).fetchone()
     return row["id"] if row else None
 
 
-def _mark_op_done(ctx: GraphContext, operation: str) -> None:
+def _mark_op_done(ctx: _Ctx, operation: str) -> None:
     wid = _work_id_for_op(ctx, operation)
     if wid:
         ctx.deps.ledger.set_work_status(wid, "done")
 
 
-def _fail_op(ctx: GraphContext, operation: str, error: str) -> None:
+def _fail_op(ctx: _Ctx, operation: str, error: str) -> None:
     wid = _work_id_for_op(ctx, operation)
     if wid:
         ctx.deps.ledger.set_work_status(wid, "failed", error=error)
 
 
-def _post_report_qa(ctx: GraphContext, assessment: dict, reviews, reports_dir) -> None:
+async def _post_report_qa(ctx: _Ctx, assessment: dict, reviews, reports_dir) -> None:
     d, s = ctx.deps, ctx.state
     try:
         from unmask.qa import suggest_rule_tunings
-        suggestions = suggest_rule_tunings(assessment, reviews, model=d.review_model)
+        suggestions = await asyncio.to_thread(
+            partial(suggest_rule_tunings, assessment, reviews, model=d.review_model))
     except Exception as exc:  # QA is advisory; never fail the run
         d.ledger.event(s.run_id, "PostReportQA", "note", {"error": repr(exc)})
         return
@@ -334,7 +374,7 @@ def _qa_markdown(suggestions) -> str:
     return "\n".join(lines)
 
 
-def _write_run_json(ctx: GraphContext, *, status: str, disposition: str | None = None) -> None:
+def _write_run_json(ctx: _Ctx, *, status: str, disposition: str | None = None) -> None:
     d, s = ctx.deps, ctx.state
     payload = {
         "runId": s.run_id, "projectId": s.project_id, "status": status,

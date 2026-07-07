@@ -1,4 +1,9 @@
-"""Graph state, deps, and the internal phase runner."""
+"""Graph state and dependencies.
+
+State is small and transient (run identity + counters); deps carry the heavy
+objects (ledger, config, toolchain, optional review model). The graph itself is
+assembled in `nodes.py` with pydantic-graph's GraphBuilder.
+"""
 
 from __future__ import annotations
 
@@ -35,42 +40,3 @@ class MCDGraphDeps:
     # None resolves from UNMASK_REVIEW_* at review time).
     review_model: Any = None
     scratch: dict[str, Any] = field(default_factory=dict)
-
-
-@dataclass
-class GraphContext:
-    state: MCDGraphState
-    deps: MCDGraphDeps
-
-
-@dataclass
-class Done:
-    """Terminal marker carrying the run result summary."""
-    result: dict
-
-
-class Node:
-    """Base phase node. Subclasses implement run(ctx) -> Node | Done."""
-
-    def run(self, ctx: GraphContext) -> "Node | Done":  # pragma: no cover - abstract
-        raise NotImplementedError
-
-
-def run_graph(start: Node, ctx: GraphContext) -> dict:
-    """Drive nodes until Done. Records enter/exit graph_events; the ledger, not
-    the node return value, is the durable record of what happened."""
-    node: Node | Done = start
-    while not isinstance(node, Done):
-        name = type(node).__name__
-        ctx.deps.ledger.event(ctx.state.run_id, name, "enter")
-        try:
-            nxt = node.run(ctx)
-        except Exception as exc:
-            ctx.deps.ledger.event(ctx.state.run_id, name, "error", {"error": repr(exc)})
-            raise
-        ctx.deps.ledger.event(ctx.state.run_id, name, "exit")
-        ctx.state.iteration += 1
-        if ctx.state.iteration > ctx.state.max_iterations:
-            raise RuntimeError(f"graph exceeded max_iterations={ctx.state.max_iterations}")
-        node = nxt
-    return node.result
