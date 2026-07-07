@@ -132,7 +132,9 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--sandbox", default="auto",
                      choices=["auto", "subprocess", "openshell", "none"])
     run.add_argument("--network", default="offline",
-                     choices=["offline", "registry", "fetch-only", "dynamic"])
+                     choices=["offline", "registry", "fetch-only", "dynamic"],
+                     help="fetch-only: download URLs the target executes (curl|sh) as "
+                          "evidence and rescan them, SSRF-guarded, never run (default offline)")
     run.add_argument("--tool-profile", default="static",
                      choices=["static", "source", "binary", "full"])
     run.add_argument("--review", action="store_true",

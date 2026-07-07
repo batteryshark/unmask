@@ -28,7 +28,9 @@ from unmask.inventory.tree import BINARY_KINDS, build_tree, classify_kind
 from unmask.ledger.store import stable_key
 from unmask.report.augment import augment_json_report, markdown_coverage_appendix
 from unmask.scanner.native import NativeScanner
-from unmask.transform import ArtifactRef, fold_results, plan_transforms, run_transform_pass
+from unmask.transform import (
+    ArtifactRef, DerivedSource, TransformResult, fold_results, plan_transforms, run_transform_pass,
+)
 
 # Bound the reveal→rescan→re-plan fixpoint so a pathological provider (or a
 # decompile that keeps producing new artifacts) can't loop forever.
@@ -131,7 +133,7 @@ class InventoryTarget(BaseNode[MCDGraphState, MCDGraphDeps, dict]):
 
 @dataclass
 class ScanAndCompose(BaseNode[MCDGraphState, MCDGraphDeps, dict]):
-    async def run(self, ctx: _Ctx) -> "ProcessTransforms | CoverageGate":
+    async def run(self, ctx: _Ctx) -> "FetchReferences | CoverageGate":
         d, s = ctx.deps, ctx.state
         _enter(ctx, "ScanAndCompose")
         reveal_dir = str(d.paths.run_dir / "revealed")
@@ -157,6 +159,82 @@ class ScanAndCompose(BaseNode[MCDGraphState, MCDGraphDeps, dict]):
         d.ledger.event(s.run_id, "ScanAndCompose", "note",
                        {"observations": len(result.observations),
                         "findings": len(result.findings)})
+        return FetchReferences()
+
+
+@dataclass
+class FetchReferences(BaseNode[MCDGraphState, MCDGraphDeps, dict]):
+    """Fetch-only network: pull remote code the target *runs* (``curl … | sh``) and fold
+    its bytes into the scan as recovered source — never executing it. Off unless
+    ``--network fetch-only``; every URL and redirect passes the SSRF guard. Fetched code
+    lands in `observations_raw`/`inv` before ProcessTransforms, so a fetched-then-
+    obfuscated payload still flows through the transform fixpoint."""
+
+    async def run(self, ctx: _Ctx) -> "ProcessTransforms":
+        d, s = ctx.deps, ctx.state
+        _enter(ctx, "FetchReferences")
+        if d.config.network not in ("fetch-only", "dynamic"):
+            return ProcessTransforms()
+        observations = d.scratch.get("observations_raw")
+        inv = d.scratch.get("inv")
+        if observations is None or inv is None:
+            return ProcessTransforms()
+
+        from unmask.net import FetchPolicy, extract_fetch_targets
+        from unmask.net import fetch as net_fetch
+        targets = extract_fetch_targets(observations, inv)
+        if not targets:
+            d.ledger.event(s.run_id, "FetchReferences", "note", {"targets": 0})
+            return ProcessTransforms()
+
+        policy = FetchPolicy()
+        fetchdir = str(d.paths.run_dir / "fetched")
+        summaries: list[dict] = []
+        derived: list[DerivedSource] = []
+        for i, t in enumerate(targets[: policy.max_fetches]):
+            wid = d.ledger.enqueue(
+                run_id=s.run_id, key=stable_key(t.url, "fetch"), target=t.url,
+                operation="fetch", category="network",
+                title=f"Fetch referenced URL {t.url}", payload={"sourceRel": t.source_rel})
+            res = await asyncio.to_thread(
+                partial(net_fetch, t.url, os.path.join(fetchdir, f"t{i}"), policy))
+            summaries.append({
+                "url": t.url, "sourceRel": t.source_rel, "ok": res.ok, "status": res.status,
+                "bytes": res.bytes_len, "sha256": res.sha256, "contentType": res.content_type,
+                "blocked": res.blocked_reason, "error": res.error, "redirects": res.redirects,
+            })
+            if res.ok and res.path:
+                origin = f"{t.source_rel}»fetch"
+                derived.append(DerivedSource(root=res.path, origin=origin, method="fetch"))
+                d.ledger.add_artifact(
+                    run_id=s.run_id, kind="fetched-content", origin="fetch", path=res.path,
+                    logical_path=f"{origin}!{os.path.basename(res.path)}",
+                    metadata={"url": t.url, "sha256": res.sha256, "bytes": res.bytes_len})
+                d.ledger.set_work_status(wid, "done",
+                    result={"sha256": res.sha256, "bytes": res.bytes_len})
+            else:
+                d.ledger.set_work_status(wid, "blocked" if res.blocked_reason else "failed",
+                    error=res.blocked_reason or res.error)
+
+        grew = False
+        if derived:
+            tr = TransformResult(provider_id="net-fetch", artifact="(references)",
+                                 capability="fetch", derived=derived)
+            outcome = await asyncio.to_thread(
+                partial(fold_results, [tr], sigs=None, known_families=frozenset(), workdir=fetchdir))
+            if outcome.observations:
+                observations.extend(outcome.observations)
+                inv.files.extend(outcome.files)
+                if outcome.dataflow:
+                    inv.dataflow = {**(inv.dataflow or {}), **outcome.dataflow}
+                grew = True
+
+        d.scratch["fetch"] = {"mode": d.config.network, "fetched": summaries}
+        if grew:
+            d.scratch["union_grew"] = True
+        d.ledger.event(s.run_id, "FetchReferences", "note", {
+            "targets": len(targets), "fetched": sum(1 for x in summaries if x["ok"]),
+            "blocked": sum(1 for x in summaries if x.get("blocked")), "grew": grew})
         return ProcessTransforms()
 
 
@@ -176,43 +254,44 @@ class ProcessTransforms(BaseNode[MCDGraphState, MCDGraphDeps, dict]):
         scan = d.scratch.get("scan")
         observations = d.scratch.get("observations_raw")
         inv = d.scratch.get("inv")
-        providers = d.toolchain.transform_providers()
-        if scan is None or observations is None or inv is None or not providers:
+        if scan is None or observations is None or inv is None:
             return ReviewFindings()
-
-        from unmask.scanner.signatures import Signatures
-        sigs = Signatures.load_vendored()
-        known_families = sigs.known_families()
-        caps = d.toolchain.available_capabilities
-        workroot = d.paths.run_dir / "transform"
-        pending_binaries = list(d.scratch.get("binary_artifacts") or [])
+        # FetchReferences may already have grown the union (fetched remote code).
+        fetched_grew = bool(d.scratch.pop("union_grew", False))
+        providers = d.toolchain.transform_providers()
 
         all_obs = list(observations)
-        done: set[str] = set()
         transformed: list[str] = []
         dropped: list[dict] = []
         notes: list[dict] = []
 
-        try:
-            outcome = await asyncio.to_thread(
-                partial(_run_transform_fixpoint, all_obs, inv, pending_binaries,
-                        providers, caps, known_families, sigs, str(workroot),
-                        done, transformed, dropped, notes))
-        except Exception as exc:  # the seam must never fail the run
-            d.ledger.event(s.run_id, "ProcessTransforms", "error", {"error": repr(exc)})
-            return ReviewFindings()
+        if providers:
+            from unmask.scanner.signatures import Signatures
+            sigs = Signatures.load_vendored()
+            known_families = sigs.known_families()
+            caps = d.toolchain.available_capabilities
+            workroot = d.paths.run_dir / "transform"
+            pending_binaries = list(d.scratch.get("binary_artifacts") or [])
+            done: set[str] = set()
+            try:
+                all_obs = await asyncio.to_thread(
+                    partial(_run_transform_fixpoint, all_obs, inv, pending_binaries,
+                            providers, caps, known_families, sigs, str(workroot),
+                            done, transformed, dropped, notes))
+            except Exception as exc:  # the seam must never fail the run
+                d.ledger.event(s.run_id, "ProcessTransforms", "error", {"error": repr(exc)})
+                all_obs = list(observations)
+            d.scratch["transforms"] = {
+                "providers": [getattr(p, "id", "re-provider") for p in providers],
+                "transformed": transformed, "droppedAtoms": dropped, "notes": notes,
+            }
 
-        all_obs = outcome
-        d.scratch["transforms"] = {
-            "providers": [getattr(p, "id", "re-provider") for p in providers],
-            "transformed": transformed, "droppedAtoms": dropped, "notes": notes,
-        }
-
-        if not transformed and not dropped and not notes:
+        if not (fetched_grew or transformed or dropped or notes):
             d.ledger.event(s.run_id, "ProcessTransforms", "note", {"transformed": 0})
             return ReviewFindings()
 
-        # Re-number the union and compose once over it, then re-record the ledger.
+        # Re-number the union and compose ONCE over it (fetch + transform derived),
+        # then re-record the ledger from the recomposed result.
         for i, o in enumerate(all_obs, start=1):
             o.id = f"obs-{i}"
         result = await asyncio.to_thread(
@@ -233,6 +312,7 @@ class ProcessTransforms(BaseNode[MCDGraphState, MCDGraphDeps, dict]):
 
         d.ledger.event(s.run_id, "ProcessTransforms", "note",
                        {"transformed": len(transformed), "droppedAtoms": len(dropped),
+                        "fetchedGrew": fetched_grew,
                         "observations": len(result.observations),
                         "findings": len(result.findings)})
         return ReviewFindings()
@@ -320,6 +400,9 @@ class RenderReport(BaseNode[MCDGraphState, MCDGraphDeps, dict]):
         transforms = d.scratch.get("transforms")
         if transforms:
             sections["transforms"] = transforms
+        fetch = d.scratch.get("fetch")
+        if fetch:
+            sections["fetch"] = fetch
 
         reports_dir = d.paths.reports_dir
         reports_dir.mkdir(parents=True, exist_ok=True)
@@ -385,6 +468,7 @@ def build_graph() -> Graph:
         g.node(InitializeRun),
         g.node(InventoryTarget),
         g.node(ScanAndCompose),
+        g.node(FetchReferences),
         g.node(ProcessTransforms),
         g.node(ReviewFindings),
         g.node(CoverageGate),
