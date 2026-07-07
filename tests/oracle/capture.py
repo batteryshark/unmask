@@ -46,12 +46,21 @@ _FIXED_STARTED = "2026-01-01T00:00:00+00:00"
 ORACLE_DIR = Path(__file__).resolve().parent
 REPO_ROOT = ORACLE_DIR.parents[1]
 
-# (name, target path) — the corpus. Paths are repo-relative.
-CORPUS: list[tuple[str, str]] = [
-    ("evil-npm", "tests/fixtures/evil-npm"),
-    ("benign-pkg", "tests/oracle/fixtures/benign-pkg"),
-    ("py-curlpipe", "tests/oracle/fixtures/py-curlpipe"),
-    ("obf-js", "tests/oracle/fixtures/obf-js"),
+# The corpus. Each fixture's golden is captured from a `source`:
+#   "oracle" (default) — the old engine, frozen before it goes away.
+#   "native"           — the native scanner, used where the old engine was WRONG
+#                        (a false negative) and the rebuild is intentionally better.
+#                        `reason` records why; `--check` validates against native.
+CORPUS: list[dict] = [
+    {"name": "evil-npm", "target": "tests/fixtures/evil-npm"},
+    {"name": "benign-pkg", "target": "tests/oracle/fixtures/benign-pkg"},
+    {"name": "py-curlpipe", "target": "tests/oracle/fixtures/py-curlpipe", "source": "native",
+     "reason": "The old engine emits content atoms from hardcoded rules.py, not the pack, so "
+               "it never saw curl/wget inside a shell string and scored setup.py's "
+               "os.system('curl URL | sh') as CLEAR — a false negative on a textbook dropper. "
+               "The vendored pack's remote-download-cmd rule emits NETW.HTTP for that string, "
+               "so native composes BP-DROPPER (+ BP-SUPPLY on the install hook). Native is correct."},
+    {"name": "obf-js", "target": "tests/oracle/fixtures/obf-js"},
 ]
 
 
@@ -118,30 +127,67 @@ def capture_one(name: str, target: str, eng, report_mod, rules, mcd_reading, bui
     }
 
 
+def capture_one_native(name: str, target: str) -> dict:
+    """Capture a golden from the NATIVE scanner — for fixtures the old engine got wrong.
+    Normalized the same way as an oracle capture so the gate tests read it identically."""
+    from unmask.scanner.assess import build_assessment as native_build
+    from unmask.scanner.compose import compose_mcd
+    from unmask.scanner.observe import observe as native_observe
+    tpath = str((REPO_ROOT / target).resolve())
+    observations, inv = native_observe(tpath)
+    findings = compose_mcd(observations, inv)
+    assessment = native_build(findings, observations, inv, tpath)
+    obs = sorted((_normalize_observation(o) for o in observations), key=_obs_sort_key)
+    return {
+        "observations": obs,
+        "findings": _normalize_volatile(findings),
+        "assessment": _normalize_volatile(assessment),
+    }
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--check", action="store_true", help="fail if goldens are stale")
+    ap.add_argument("--only", nargs="*", metavar="NAME",
+                    help="restrict to these fixtures (default: all)")
     args = ap.parse_args(argv)
 
-    root = _resolve_engine_root()
-    sys.path.insert(0, str(root))
-    from engine import engine as eng, report as report_mod, rules  # type: ignore
-    from engine import __version__ as engine_version  # type: ignore
-    from mcd_lens import mcd_reading, build_assessment  # type: ignore
+    corpus = [f for f in CORPUS if not args.only or f["name"] in args.only]
+    needs_oracle = any(f.get("source", "oracle") == "oracle" for f in corpus)
+
+    eng = report_mod = rules = mcd_reading = build_assessment = None
+    engine_version = None
+    if needs_oracle:
+        root = _resolve_engine_root()
+        sys.path.insert(0, str(root))
+        from engine import engine as eng, report as report_mod, rules  # type: ignore
+        from engine import __version__ as engine_version  # type: ignore
+        from mcd_lens import mcd_reading, build_assessment  # type: ignore
 
     golden_dir = ORACLE_DIR / "golden"
     stale: list[str] = []
-    provenance = {"engineVersion": engine_version, "engineRoot": str(root),
-                  "fixedStarted": _FIXED_STARTED, "fixtures": {}}
+    prov_fp = golden_dir / "provenance.json"
+    provenance = json.loads(prov_fp.read_text()) if prov_fp.is_file() else {}
+    provenance.setdefault("fixedStarted", _FIXED_STARTED)
+    provenance.setdefault("fixtures", {})
+    if engine_version:
+        provenance["engineVersion"] = engine_version
 
-    for name, target in CORPUS:
-        result = capture_one(name, target, eng, report_mod, rules, mcd_reading, build_assessment)
+    for f in corpus:
+        name, target, source = f["name"], f["target"], f.get("source", "oracle")
+        if source == "native":
+            result = capture_one_native(name, target)
+        else:
+            result = capture_one(name, target, eng, report_mod, rules, mcd_reading, build_assessment)
         summary = {
+            "source": source,
             "observations": len(result["observations"]),
             "findings": len(result["findings"]),
             "disposition": (result["assessment"].get("disposition") or {}).get("recommendation"),
             "compositions": (result["assessment"].get("summary") or {}).get("compositions"),
         }
+        if f.get("reason"):
+            summary["reason"] = f["reason"]
         provenance["fixtures"][name] = summary
         out = golden_dir / name
         out.mkdir(parents=True, exist_ok=True)
@@ -153,11 +199,10 @@ def main(argv: list[str] | None = None) -> int:
                     stale.append(f"{name}/{key}.json")
             else:
                 fp.write_text(text, encoding="utf-8")
-        print(f"  {name:14} obs={summary['observations']:<3} findings={summary['findings']} "
+        print(f"  {name:14} [{source}] obs={summary['observations']:<3} findings={summary['findings']} "
               f"disposition={summary['disposition']} {summary['compositions'] or ''}")
 
     prov_text = json.dumps(provenance, indent=2, sort_keys=True) + "\n"
-    prov_fp = golden_dir / "provenance.json"
     if args.check:
         if not prov_fp.is_file() or prov_fp.read_text(encoding="utf-8") != prov_text:
             stale.append("provenance.json")

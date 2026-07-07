@@ -65,11 +65,11 @@
     },
     {
       "path": "signatures/packs/content-surfaces.json",
-      "sha256": "2c355ad0e6dc17d0d41b13c6bc8f717fd3e85cd1311075802e3b056df48273fa"
+      "sha256": "8a80941ff8d238686841fad9c30e4312e7aec748757871419ed4eb4fcacfc2d7"
     },
     {
       "path": "signatures/packs/content-surfaces.yaml",
-      "sha256": "4be43322ff5da941b329dbbd5a2d9de3a21ddd6fba4a377d023f4ff19ede7936"
+      "sha256": "093fb959d1565d43438c50c4f27d6ecc0fdd72904968f282b6212dc8e1f9cdfc"
     },
     {
       "path": "signatures/packs/source-callees.json",

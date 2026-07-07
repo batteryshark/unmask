@@ -1,1 +1,90 @@
-[]
+[
+  {
+    "amplifiers": [
+      "Behavior triggers at install, not at explicit use."
+    ],
+    "claim": "A package install hook (npm lifecycle script or Python setup.py) runs network, shell, or decode-and-execute behavior before any user code is invoked.",
+    "composition": "BP-SUPPLY",
+    "confidence": 0.7,
+    "confidenceLabel": "medium",
+    "disproofCriteria": [
+      "The install code is a documented, reproducible build step.",
+      "Fetched/decoded content is version-pinned with integrity (hash/signature) checks."
+    ],
+    "evidence": [
+      "obs-8",
+      "obs-4"
+    ],
+    "id": "mcd-1",
+    "lens": "mcd",
+    "response": {
+      "actions": [
+        "Block auto-install in CI until reviewed",
+        "Pin and vendor the dependency"
+      ],
+      "summary": "Engineering referral + passive monitoring until verified.",
+      "tier": 3
+    },
+    "severity": "high",
+    "title": "Install-time payload path",
+    "verification": [
+      {
+        "method": "static-source",
+        "question": "What does the install hook fetch, decode, or execute, and from where?",
+        "reason": "Confirm the payload behavior and destination."
+      },
+      {
+        "method": "osint",
+        "question": "Is the destination maintainer-controlled and documented?",
+        "reason": "Destination reputation changes interpretation."
+      },
+      {
+        "method": "dynamic",
+        "question": "Does behavior differ under CI/sandbox?",
+        "reason": "Install-time gating is a strong malicious signal."
+      }
+    ]
+  },
+  {
+    "amplifiers": [
+      "Remote content is executed directly rather than written and inspected first."
+    ],
+    "claim": "Code fetches remote content and passes it directly into a shell or dynamic evaluator. That is the direct remote-execution variant of the dropper shape; no intermediate file write is required.",
+    "composition": "BP-DROPPER",
+    "confidence": 0.68,
+    "confidenceLabel": "medium",
+    "disproofCriteria": [
+      "The downloaded content is fixed, maintainer-controlled, documented, and integrity-checked before execution.",
+      "The shell/eval sink receives only a trusted local constant, not network content.",
+      "No control-flow or dataflow path links these observations; they co-occur in one file or component but are not reachable from one another."
+    ],
+    "evidence": [
+      "obs-4",
+      "obs-2"
+    ],
+    "id": "mcd-2",
+    "lens": "mcd",
+    "response": {
+      "actions": [
+        "Do not pipe remote content to a shell",
+        "Vendor or pin the script with integrity checks"
+      ],
+      "summary": "Block or sandbox until the remote payload and integrity story are verified.",
+      "tier": 4
+    },
+    "severity": "high",
+    "title": "Download-and-execute (direct remote exec)",
+    "verification": [
+      {
+        "method": "static-source",
+        "question": "What remote content is executed and who controls it?",
+        "reason": "Remote control of the executed bytes is the key risk."
+      },
+      {
+        "method": "static-source",
+        "question": "Is the downloaded script pinned by hash/signature before execution?",
+        "reason": "Integrity verification can disprove the malicious shape."
+      }
+    ]
+  }
+]

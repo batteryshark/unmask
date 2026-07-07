@@ -2,56 +2,65 @@
   {
     "atom": "ARTF.URL",
     "confidence": 0.7,
-    "line": null,
-    "method": "static-source",
+    "line": 4,
+    "method": "content-regex",
     "path": "loader.py",
     "relationships": [],
-    "rule_id": "regex.ARTF.URL"
+    "rule_id": "sig.content.artf.url"
   },
   {
     "atom": "LOAD.EVAL",
-    "confidence": 0.85,
-    "line": null,
-    "method": "static-source",
+    "confidence": 0.6,
+    "line": 4,
+    "method": "source-callee-ast",
     "path": "loader.py",
     "relationships": [],
-    "rule_id": "ast.LOAD.EVAL"
+    "rule_id": "sig.load.eval.python.dynamic-exec"
   },
   {
     "atom": "NETW.HTTP",
-    "confidence": 0.8,
-    "line": null,
-    "method": "static-source",
+    "confidence": 0.75,
+    "line": 3,
+    "method": "source-callee-ast",
     "path": "loader.py",
     "relationships": [],
-    "rule_id": "ast.NETW.HTTP"
+    "rule_id": "sig.netw.http.universal.substring.curl-exec"
   },
   {
     "atom": "ARTF.URL",
     "confidence": 0.7,
-    "line": null,
-    "method": "static-source",
+    "line": 2,
+    "method": "content-regex",
     "path": "setup.py",
     "relationships": [],
-    "rule_id": "regex.ARTF.URL"
-  },
-  {
-    "atom": "EXEC.SHELL",
-    "confidence": 0.85,
-    "line": null,
-    "method": "static-source",
-    "path": "setup.py",
-    "relationships": [],
-    "rule_id": "ast.EXEC.SHELL"
+    "rule_id": "sig.content.artf.url"
   },
   {
     "atom": "EXEC.SHELL",
     "confidence": 0.8,
-    "line": null,
-    "method": "static-source",
+    "line": 2,
+    "method": "content-regex",
     "path": "setup.py",
     "relationships": [],
-    "rule_id": "regex.EXEC.SHELL"
+    "rule_id": "sig.content.curl-pipe-sh"
+  },
+  {
+    "atom": "EXEC.SHELL",
+    "confidence": 0.78,
+    "line": 2,
+    "method": "source-callee-ast",
+    "path": "setup.py",
+    "relationships": [],
+    "rule_id": "sig.exec.shell.universal.base.popen"
+  },
+  {
+    "atom": "NETW.HTTP",
+    "confidence": 0.6,
+    "line": 2,
+    "method": "content-regex",
+    "path": "setup.py",
+    "relationships": [],
+    "rule_id": "sig.content.remote-download-cmd"
   },
   {
     "atom": "PKGM.INSTALL",
