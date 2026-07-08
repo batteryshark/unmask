@@ -153,6 +153,20 @@ class LedgerStore:
             (run_id,))
         return cur.fetchone()["c"]
 
+    def lease_next_actionable(self, run_id: str):
+        """Claim the highest-priority queued work item (mark it `leased`) and return its
+        row, or None if the queue is drained. The ProcessWorkQueue loop's lease step —
+        a handler must then drive it to a terminal status."""
+        row = self.conn.execute(
+            "select * from work_items where run_id=? and status='queued' "
+            "order by priority desc, created_at asc limit 1", (run_id,)).fetchone()
+        if row is None:
+            return None
+        self.conn.execute("update work_items set status='leased', updated_at=? where id=?",
+                          (_now(), row["id"]))
+        self.conn.commit()
+        return row
+
     # --- observations / findings -----------------------------------------
     def add_observation(self, *, run_id, atom, confidence, method, rule_id=None,
                         artifact_id=None, location=None, evidence=None,

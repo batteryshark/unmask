@@ -36,6 +36,8 @@ from unmask.transform import (
 # decompile that keeps producing new artifacts) can't loop forever.
 _MAX_TRANSFORM_PASSES = 4
 _MAX_TRANSFORMS = 64
+# Runaway backstop for the ProcessWorkQueue loop (far above any real queue depth).
+_MAX_WORK_ITEMS = 500
 
 _Ctx = GraphRunContext[MCDGraphState, MCDGraphDeps]
 
@@ -88,7 +90,10 @@ class InventoryTarget(BaseNode[MCDGraphState, MCDGraphDeps, dict]):
         )
         d.scratch["tree"] = tree
 
-        # Binary artifacts: record them, then decide by the plugin boundary.
+        # Binary artifacts: record + ENQUEUE (status `queued`). Disposition is decided
+        # in one place downstream — ProcessTransforms opens up the ones a provider can
+        # handle (flips them `done`), and the ProcessWorkQueue loop drains the rest to
+        # blocked/deferred. That single decision point is what the work queue buys us.
         has_re = d.toolchain.has_re
         binary_artifacts: list[ArtifactRef] = []
         for rel in tree.binary_paths:
@@ -99,25 +104,12 @@ class InventoryTarget(BaseNode[MCDGraphState, MCDGraphDeps, dict]):
                 run_id=s.run_id, kind=kind if kind in BINARY_KINDS else "native-binary",
                 origin="inventory", path=str(abspath), logical_path=rel,
             )
-            wid = d.ledger.enqueue(
+            d.ledger.enqueue(
                 run_id=s.run_id, key=stable_key(rel, "scan-binary"),
                 target=rel, operation="scan-binary", category="binary",
                 title=f"Deep-analyse binary artifact {rel}",
                 payload={"artifactId": art_id, "kind": kind},
             )
-            if not has_re:
-                d.ledger.set_work_status(
-                    wid, "blocked",
-                    error="No RE provider installed (install unmask-re); binary not "
-                          "deeply analysed. Reported as a coverage blind spot.",
-                )
-            else:
-                d.ledger.set_work_status(
-                    wid, "deferred",
-                    result={"note": "RE provider present; deep binary analysis is a "
-                                    "pending milestone (stub provider). Artifact not "
-                                    "yet decompiled."},
-                )
 
         d.ledger.enqueue(
             run_id=s.run_id, key=stable_key(str(s.target_path), "scan-source"),
@@ -389,17 +381,44 @@ class ReviewFindings(BaseNode[MCDGraphState, MCDGraphDeps, dict]):
 
 @dataclass
 class CoverageGate(BaseNode[MCDGraphState, MCDGraphDeps, dict]):
-    """Decide the next phase from ledger state, not model output."""
+    """Decide the next phase from ledger state, not model output. Hands off to the
+    work-queue loop, which drains whatever discovery left actionable."""
 
-    async def run(self, ctx: _Ctx) -> "RenderReport":
+    async def run(self, ctx: _Ctx) -> "ProcessWorkQueue":
         d, s = ctx.deps, ctx.state
         _enter(ctx, "CoverageGate")
         actionable = d.ledger.actionable_count(s.run_id)
         d.ledger.event(s.run_id, "CoverageGate", "note",
                        {"actionable": actionable, "coverage": d.ledger.coverage(s.run_id)})
-        # First cut has no re-queuing workers, so once source scan is terminal we
-        # render. Later milestones loop back to a ProcessWorkQueue node here.
-        return RenderReport()
+        return ProcessWorkQueue()
+
+
+@dataclass
+class ProcessWorkQueue(BaseNode[MCDGraphState, MCDGraphDeps, dict]):
+    """The graph's branching loop. Lease the next actionable work item, dispatch it to a
+    handler that drives it terminal (and may enqueue follow-ups), then SELF-LOOP until
+    the queue is drained or the bound is hit. One item per pass, so N discovered items
+    drain across N iterations — visible in the ledger's graph_events. This is where the
+    pipeline stops assuming work is done inline and actually works it off; new operations
+    plug in as handlers without touching the graph."""
+
+    async def run(self, ctx: _Ctx) -> "ProcessWorkQueue | RenderReport":
+        d, s = ctx.deps, ctx.state
+        _enter(ctx, "ProcessWorkQueue")
+        processed = d.scratch.get("wq_processed", 0)
+        if processed >= _MAX_WORK_ITEMS:  # runaway backstop; surfaced, never silent
+            d.ledger.event(s.run_id, "ProcessWorkQueue", "note",
+                           {"stopped": "max-work-items", "processed": processed,
+                            "remaining": d.ledger.actionable_count(s.run_id)})
+            return RenderReport()
+        item = d.ledger.lease_next_actionable(s.run_id)
+        if item is None:
+            d.ledger.event(s.run_id, "ProcessWorkQueue", "note",
+                           {"drained": True, "processed": processed})
+            return RenderReport()
+        d.scratch["wq_processed"] = processed + 1
+        _dispatch_work(ctx, dict(item))
+        return ProcessWorkQueue()
 
 
 @dataclass
@@ -501,9 +520,50 @@ def build_graph() -> Graph:
         g.node(ProcessTransforms),
         g.node(ReviewFindings),
         g.node(CoverageGate),
+        g.node(ProcessWorkQueue),
         g.node(RenderReport),
     )
     return g.build()
+
+
+# --- work-queue handlers ---------------------------------------------------
+
+def _handle_scan_binary(ctx: _Ctx, item: dict) -> None:
+    """A binary artifact ProcessTransforms did NOT open up (no working RE provider, or
+    none with the right capability). Its disposition is an honest coverage blind spot:
+    `deferred` when a provider is present but couldn't handle it, `blocked` when nothing
+    is installed. Both surface in the report as 'not deeply analysed'."""
+    d = ctx.deps
+    if d.toolchain.has_re:
+        d.ledger.set_work_status(item["id"], "deferred",
+            result={"note": "RE provider(s) present but none deep-analysed this artifact "
+                            "(missing capability or non-functional provider); not decompiled."})
+    else:
+        d.ledger.set_work_status(item["id"], "blocked",
+            error="No RE provider installed (install unmask-re); binary not deeply "
+                  "analysed. Reported as a coverage blind spot.")
+
+
+_WORK_HANDLERS = {
+    "scan-binary": _handle_scan_binary,
+}
+
+
+def _dispatch_work(ctx: _Ctx, item: dict) -> None:
+    """Route one leased work item to its handler; an unknown operation is deferred with
+    a note (never left leased — that would stall the loop)."""
+    op = item.get("operation")
+    handler = _WORK_HANDLERS.get(op)
+    try:
+        if handler is not None:
+            handler(ctx, item)
+        else:
+            ctx.deps.ledger.set_work_status(item["id"], "deferred",
+                result={"note": f"No queue handler for operation {op!r}."})
+    except Exception as exc:  # a handler bug must not stall the loop
+        ctx.deps.ledger.set_work_status(item["id"], "failed", error=f"{type(exc).__name__}: {exc}")
+        ctx.deps.ledger.event(ctx.state.run_id, "ProcessWorkQueue", "error",
+                              {"operation": op, "error": repr(exc)})
 
 
 # --- helpers ---------------------------------------------------------------
