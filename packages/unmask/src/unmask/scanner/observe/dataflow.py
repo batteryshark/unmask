@@ -358,6 +358,7 @@ def prove_paths(src: str, lang: str):
                               "sinkKind": "egress", "line": line})
         if not sks or args is None:
             continue
+        matched_sinks: set = set()  # (sink kinds already proven for THIS call, via var/fn)
         for v in _identifiers(args, data):
             src_kinds = source_fns.get(v, set())          # v names a source-returning helper
             if assign_count.get(v) == 1:                  # or v is a single-assignment tainted var
@@ -373,6 +374,24 @@ def prove_paths(src: str, lang: str):
                         seen.add(key)
                         paths.append({"kind": kind, "shape": shape, "variable": v,
                                       "sourceKind": src_kind, "sinkKind": sk, "line": line})
+                    matched_sinks.add(sk)
+        # Inline source directly in the args (no variable), e.g. exec(urlopen(u).read()).
+        # Scoped to `fetch` on purpose: the fetch-direct dropper is the gap being closed,
+        # while decode-inline (eval(atob(x))) is already flagged via BP-OBFEXEC co-
+        # occurrence — broadening here would reclassify frozen-oracle findings as proven.
+        for src_kind in _source_kinds(_node_text(args, data)) & {"fetch"}:
+            for sk in sks:
+                if sk in matched_sinks:   # already proven via a variable/helper for this call
+                    continue
+                hit = _PROVEN.get((src_kind, sk))
+                if not hit:
+                    continue
+                kind, shape = hit
+                key = (kind, "inline", line)
+                if key not in seen:
+                    seen.add(key)
+                    paths.append({"kind": kind, "shape": shape, "variable": "call argument",
+                                  "sourceKind": src_kind, "sinkKind": sk, "line": line})
     return paths
 
 
