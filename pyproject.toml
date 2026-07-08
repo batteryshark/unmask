@@ -14,7 +14,7 @@ members = ["packages/*"]
 # muster graduated to its own private repo (github.com/batteryshark/muster) — consumed
 # here as a pinned git dependency, not a workspace member. Bump `rev` to adopt a new
 # muster release.
-muster = { git = "https://github.com/batteryshark/muster.git", rev = "e2f7668c5927a10e8a97cb6a34b3eca5bbf4fc39" }
+muster = { git = "https://github.com/batteryshark/muster.git", rev = "3a14fad5dec9e84483d12ebd4c3a62aecbb0eeb5" }
 lucent = { workspace = true }
 unmask = { workspace = true }
 unmask-re = { workspace = true }

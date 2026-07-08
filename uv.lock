@@ -911,7 +911,7 @@ dev = [
 ]
 
 [package.metadata]
-requires-dist = [{ name = "muster", git = "https://github.com/batteryshark/muster.git?rev=e2f7668c5927a10e8a97cb6a34b3eca5bbf4fc39" }]
+requires-dist = [{ name = "muster", git = "https://github.com/batteryshark/muster.git?rev=3a14fad5dec9e84483d12ebd4c3a62aecbb0eeb5" }]
 
 [package.metadata.requires-dev]
 dev = [{ name = "pytest", specifier = ">=8" }]
@@ -993,7 +993,7 @@ wheels = [
 [[package]]
 name = "muster"
 version = "0.0.1"
-source = { git = "https://github.com/batteryshark/muster.git?rev=e2f7668c5927a10e8a97cb6a34b3eca5bbf4fc39#e2f7668c5927a10e8a97cb6a34b3eca5bbf4fc39" }
+source = { git = "https://github.com/batteryshark/muster.git?rev=3a14fad5dec9e84483d12ebd4c3a62aecbb0eeb5#3a14fad5dec9e84483d12ebd4c3a62aecbb0eeb5" }
 dependencies = [
     { name = "pydantic-graph" },
 ]
@@ -2135,7 +2135,7 @@ review = [
 [package.metadata]
 requires-dist = [
     { name = "mcp", marker = "extra == 'mcp'", specifier = ">=1.0.0" },
-    { name = "muster", git = "https://github.com/batteryshark/muster.git?rev=e2f7668c5927a10e8a97cb6a34b3eca5bbf4fc39" },
+    { name = "muster", git = "https://github.com/batteryshark/muster.git?rev=3a14fad5dec9e84483d12ebd4c3a62aecbb0eeb5" },
     { name = "pydantic", specifier = ">=2.7" },
     { name = "pydantic-ai", marker = "extra == 'review'", specifier = ">=0.0.1" },
     { name = "pydantic-graph", specifier = ">=0.0.1" },
