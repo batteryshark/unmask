@@ -17,6 +17,7 @@ keywords = ["security", "malware", "static-analysis", "supply-chain", "mcd"]
 # accurate default path; a regex fallback keeps the tool working where the grammar
 # wheel can't install. Heavy RE deps (lief/capstone/decompilers) stay in unmask-re.
 dependencies = [
+    "muster",  # the ledgered investigation runtime (graph + ledger + resume + patterns)
     "pydantic>=2.7",
     "pydantic-graph>=0.0.1",
     "tree-sitter>=0.23",

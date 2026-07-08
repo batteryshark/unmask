@@ -14,7 +14,7 @@ from typing import Any
 from unmask.config import MCDConfig
 from unmask.ledger import LedgerStore
 from unmask.providers import ToolchainStatus
-from unmask.storage.paths import RunPaths
+from muster.paths import RunPaths
 
 
 @dataclass

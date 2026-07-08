@@ -1,20 +1,22 @@
-"""Project/run identity and the on-disk run directory layout.
+"""Project/run identity and the on-disk run directory layout (muster core).
 
-Layout (see docs/design.md "Run Storage And SQLite UX"):
+Layout:
 
     <storage_root>/
       projects/
-        <project-id>/
+        <project-id>/            a project = repeated sweeps of one target
           runs/
             <started>-<run-hash>/
               run.json          small status file for cheap discovery/resume
               run.db            authoritative per-run SQLite ledger
-              reports/          rendered report.{html,md,json}
-              artifacts/tree/   bounded target tree
-              tool-output/  fetched/  logs/  tmp/
+              reports/          rendered outputs
+              artifacts/        run artifacts
+              fetched/  logs/  tmp/
 
-One SQLite database per run, next to the reports it describes: no write
-contention between concurrent scans, trivial archival, resume is just a path.
+One SQLite database per run, next to the outputs it describes: no write contention
+between concurrent runs, trivial archival, resume is just a path. Project identity is
+content-derived (git root/remote or target path) so repeated sweeps of one target group
+under the same project.
 """
 
 from __future__ import annotations

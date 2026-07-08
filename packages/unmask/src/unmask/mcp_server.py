@@ -123,7 +123,7 @@ def project_status(run_dir: str) -> dict:
 
 
 def read_report(run_dir: str, fmt: str = "md"):
-    from unmask.storage.paths import resolve_run_dir
+    from muster.paths import resolve_run_dir
     if fmt not in {"md", "json", "html"}:
         raise ValueError(f"format must be md|json|html; got {fmt!r}")
     fp = resolve_run_dir(run_dir).reports_dir / f"report.{fmt}"

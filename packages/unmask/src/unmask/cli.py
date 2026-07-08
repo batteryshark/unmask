@@ -184,7 +184,7 @@ def _cmd_status(args: argparse.Namespace) -> int:
 
 
 def _cmd_report(args: argparse.Namespace) -> int:
-    from unmask.storage.paths import resolve_run_dir
+    from muster.paths import resolve_run_dir
 
     paths = resolve_run_dir(args.run_dir)
     fp = paths.reports_dir / f"report.{ 'md' if args.format == 'md' else args.format }"

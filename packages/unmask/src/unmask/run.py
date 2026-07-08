@@ -10,7 +10,7 @@ from unmask.config import MCDConfig
 from unmask.graph import InitializeRun, MCDGraphDeps, MCDGraphState, build_graph
 from unmask.ledger import LedgerStore
 from unmask.providers import discover_providers
-from unmask.storage.paths import (
+from muster.paths import (
     RunPaths, compute_project_id, compute_run_id, new_run_paths, resolve_run_dir,
 )
 

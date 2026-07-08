@@ -11,6 +11,7 @@
 members = ["packages/*"]
 
 [tool.uv.sources]
+muster = { workspace = true }
 unmask = { workspace = true }
 unmask-re = { workspace = true }
 
