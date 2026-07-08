@@ -28,6 +28,21 @@ def _as_dict(rec) -> dict:
     return dict(rec) if isinstance(rec, dict) else {}
 
 
+def _coerce_line(v):
+    """A provider (esp. a decoupled one round-tripping through JSON) may hand back a
+    line as int, float, or numeric string. Preserve a real line number; bool is NOT a
+    line (it is an int subclass), and anything non-numeric drops to None."""
+    if isinstance(v, bool):
+        return None
+    if isinstance(v, int):
+        return v
+    if isinstance(v, float):
+        return int(v)
+    if isinstance(v, str) and v.strip().lstrip("-").isdigit():
+        return int(v)
+    return None
+
+
 def ingest_atoms(records, *, origin: str, known_families, source: str = "re-provider"):
     """Turn emitted-atom records into Observations tagged with ``origin`` provenance.
 
@@ -55,11 +70,10 @@ def ingest_atoms(records, *, origin: str, known_families, source: str = "re-prov
         conf = min(1.0, max(0.0, conf))
         member = str(d.get("path") or "").strip()
         path = f"{origin}!{member}" if (origin and member) else (member or origin)
-        line = d.get("line")
         observations.append(Observation(
             atom=atom, confidence=conf,
             method=str(d.get("method") or source),
-            path=path, line=int(line) if isinstance(line, int) else None,
+            path=path, line=_coerce_line(d.get("line")),
             rule_id=d.get("rule_id"), evidence=d.get("evidence"),
             summary=d.get("summary"),
         ))

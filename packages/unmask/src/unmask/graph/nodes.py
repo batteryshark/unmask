@@ -240,14 +240,35 @@ class FetchReferences(BaseNode[MCDGraphState, MCDGraphDeps, dict]):
         if derived:
             tr = TransformResult(provider_id="net-fetch", artifact="(references)",
                                  capability="fetch", derived=derived)
-            outcome = await asyncio.to_thread(
-                partial(fold_results, [tr], sigs=None, known_families=frozenset(), workdir=fetchdir))
-            if outcome.observations:
+            try:  # attacker-controlled fetched bytes must never crash the run
+                outcome = await asyncio.to_thread(partial(
+                    fold_results, [tr], sigs=None, known_families=frozenset(), workdir=str(fetchdir)))
+            except Exception as exc:
+                d.ledger.event(s.run_id, "FetchReferences", "error", {"error": repr(exc)})
+                outcome = None
+            if outcome is not None:
                 observations.extend(outcome.observations)
-                inv.files.extend(outcome.files)
+                inv.files.extend(outcome.files)  # fold in even with 0 atoms (binary payloads)
                 if outcome.dataflow:
                     inv.dataflow = {**(inv.dataflow or {}), **outcome.dataflow}
-                grew = True
+                # A fetched binary payload (packed ELF, archive, ...) is a first-class
+                # artifact: enqueue it + route it to the transform fixpoint so an RE
+                # provider can open it up, and so an un-analysed one is a tracked blind
+                # spot rather than an invisible gap.
+                bins = d.scratch.setdefault("binary_artifacts", [])
+                for f in outcome.files:
+                    k = classify_kind(Path(f.path))
+                    if k not in BINARY_KINDS:
+                        continue
+                    bins.append(ArtifactRef(path=f.path, logical_path=f.rel, kind=k))
+                    art_id = d.ledger.add_artifact(
+                        run_id=s.run_id, kind=k, origin="fetch", path=f.path, logical_path=f.rel)
+                    d.ledger.enqueue(
+                        run_id=s.run_id, key=stable_key(f.rel, "scan-binary"), target=f.rel,
+                        operation="scan-binary", category="binary",
+                        title=f"Deep-analyse fetched binary {f.rel}",
+                        payload={"artifactId": art_id, "kind": k})
+                grew = bool(outcome.observations)
 
         d.scratch["fetch"] = {"mode": d.config.network, "fetched": summaries}
         if grew:
@@ -290,7 +311,11 @@ class ProcessTransforms(BaseNode[MCDGraphState, MCDGraphDeps, dict]):
             from unmask.scanner.signatures import Signatures
             sigs = Signatures.load_vendored()
             known_families = sigs.known_families()
-            caps = d.toolchain.available_capabilities
+            # Plan against the capabilities of the EXECUTION pool (providers that can
+            # actually transform), not the full toolchain union — otherwise a request is
+            # planned for a capability only a non-transform provider advertises, then
+            # silently skipped while the artifact is already marked done in the fixpoint.
+            caps = {c for p in providers for c in (getattr(p, "capabilities", []) or [])}
             workroot = d.paths.run_dir / "transform"
             pending_binaries = list(d.scratch.get("binary_artifacts") or [])
             done: set[str] = set()
@@ -302,6 +327,7 @@ class ProcessTransforms(BaseNode[MCDGraphState, MCDGraphDeps, dict]):
             except Exception as exc:  # the seam must never fail the run
                 d.ledger.event(s.run_id, "ProcessTransforms", "error", {"error": repr(exc)})
                 all_obs = list(observations)
+                transformed.clear(); dropped.clear(); notes.clear()  # roll back partial claims
             d.scratch["transforms"] = {
                 "providers": [getattr(p, "id", "re-provider") for p in providers],
                 "transformed": transformed, "droppedAtoms": dropped, "notes": notes,
@@ -454,7 +480,9 @@ class RenderReport(BaseNode[MCDGraphState, MCDGraphDeps, dict]):
 
         reports_dir = d.paths.reports_dir
         reports_dir.mkdir(parents=True, exist_ok=True)
-        blocked_binaries = counts.get("blocked", 0)
+        # Only binary artifacts, not network-blocked fetch items (both use 'blocked').
+        blocked_binaries = d.ledger.count_work_items(
+            s.run_id, operation="scan-binary", status="blocked")
 
         if scan is not None:
             _atomic_write(reports_dir / "report.html", scan.rendered["html"])
@@ -534,10 +562,15 @@ def _handle_scan_binary(ctx: _Ctx, item: dict) -> None:
     `deferred` when a provider is present but couldn't handle it, `blocked` when nothing
     is installed. Both surface in the report as 'not deeply analysed'."""
     d = ctx.deps
-    if d.toolchain.has_re:
+    # 'blocked' means no RE tooling at all; 'deferred' means an RE provider IS installed
+    # but none opened THIS artifact up (wrong capability, e.g. a deobfuscate-only
+    # provider, or a non-functional one). Keyed on any registered provider, not just
+    # binary-capable ones, so we don't tell the user to install what they already have.
+    installed = any(p.error is None for p in d.toolchain.providers)
+    if installed:
         d.ledger.set_work_status(item["id"], "deferred",
             result={"note": "RE provider(s) present but none deep-analysed this artifact "
-                            "(missing capability or non-functional provider); not decompiled."})
+                            "(no binary-capable provider, or a non-functional one); not decompiled."})
     else:
         d.ledger.set_work_status(item["id"], "blocked",
             error="No RE provider installed (install unmask-re); binary not deeply "
@@ -595,41 +628,57 @@ def _record_scan(ctx: _Ctx, result) -> None:
 def _run_transform_fixpoint(all_obs, inv, pending_binaries, providers, caps,
                             known_families, sigs, workroot, done, transformed,
                             dropped, notes) -> list:
-    """The reveal→rescan→re-plan loop (sync; runs in a worker thread). Mutates
-    ``all_obs`` / ``inv`` / the accumulator lists in place and returns ``all_obs``."""
+    """The reveal→rescan→re-plan loop (sync; runs in a worker thread).
+
+    Each pass is ATOMIC: its results are folded into ``all_obs``/``inv`` and its
+    artifacts recorded in ``transformed`` only after the pass fully succeeds, so a
+    provider (or rescan) that raises mid-pass drops that pass with a note rather than
+    leaving observations, inventory, and the transformed set half-applied. Only
+    artifacts that actually recovered something (``produced_anything``) are recorded as
+    transformed — an error-free-but-empty result is NOT claimed as deep-analysed."""
     total = 0
     for pass_i in range(_MAX_TRANSFORM_PASSES):
-        requests = plan_transforms(all_obs, inv, binary_artifacts=pending_binaries,
-                                   capabilities=caps, done=done)
-        requests = requests[: max(0, _MAX_TRANSFORMS - total)]
-        if not requests:
+        try:
+            requests = plan_transforms(all_obs, inv, binary_artifacts=pending_binaries,
+                                       capabilities=caps, done=done)
+            requests = requests[: max(0, _MAX_TRANSFORMS - total)]
+            if not requests:
+                break
+            for r in requests:
+                done.add(r.artifact.logical_path)
+            total += len(requests)
+            pass_dir = os.path.join(workroot, f"pass-{pass_i}")
+            os.makedirs(pass_dir, exist_ok=True)
+            results = run_transform_pass(requests, providers, pass_dir)
+            outcome = fold_results(results, sigs=sigs, known_families=known_families, workdir=pass_dir)
+        except Exception as exc:  # a broken pass is dropped, not fatal — state stays consistent
+            notes.append({"pass": pass_i, "error": f"{type(exc).__name__}: {exc}"})
             break
-        for r in requests:
-            done.add(r.artifact.logical_path)
-        total += len(requests)
 
-        pass_dir = os.path.join(workroot, f"pass-{pass_i}")
-        os.makedirs(pass_dir, exist_ok=True)
-        results = run_transform_pass(requests, providers, pass_dir)
-        for res in results:
-            if not res.error:
-                transformed.append(res.artifact)
-        outcome = fold_results(results, sigs=sigs, known_families=known_families, workdir=pass_dir)
+        # Commit — pure list/dict ops, only reached when the whole pass succeeded.
+        transformed.extend(res.artifact for res in results
+                           if not res.error and res.produced_anything)
         dropped.extend(outcome.dropped)
         notes.extend(outcome.notes)
-
         all_obs.extend(outcome.observations)
         inv.files.extend(outcome.files)
         if outcome.dataflow:
             inv.dataflow = {**(inv.dataflow or {}), **outcome.dataflow}
 
-        # Nested binaries revealed inside recovered source drive the next pass.
-        pending_binaries = [
-            ArtifactRef(path=f.path, logical_path=f.rel, kind=classify_kind(Path(f.path)))
-            for f in outcome.files if classify_kind(Path(f.path)) in BINARY_KINDS
-        ]
+        # Nested binaries revealed inside recovered source drive the next pass; carry
+        # forward any earlier binaries not yet requested (e.g. truncated by the budget)
+        # so they aren't silently dropped.
+        new_bins = [ArtifactRef(path=f.path, logical_path=f.rel, kind=classify_kind(Path(f.path)))
+                    for f in outcome.files if classify_kind(Path(f.path)) in BINARY_KINDS]
+        pending_binaries = [b for b in pending_binaries
+                            if b.logical_path not in done] + new_bins
         if not outcome.observations and not pending_binaries:
             break
+
+    if pending_binaries:  # never silently drop coverage — surface what wasn't reached
+        notes.append({"note": "transform budget/pass limit reached; nested binaries not analysed",
+                      "count": len(pending_binaries),
+                      "artifacts": [b.logical_path for b in pending_binaries[:20]]})
     return all_obs
 
 

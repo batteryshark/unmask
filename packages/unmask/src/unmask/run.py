@@ -86,7 +86,13 @@ def resume_mcd(run_dir: str, *, review_model=None) -> RunResult:
         ledger.close()
         raise ValueError(f"no run {paths.run_id!r} recorded in {paths.db_path}")
     prior_status = row["status"]
-    config = MCDConfig(**json.loads(row["config_json"] or "{}"))
+    try:
+        config = MCDConfig(**json.loads(row["config_json"] or "{}"))
+    except (ValueError, TypeError) as exc:  # malformed json / config schema drift
+        ledger.close()
+        raise ValueError(
+            f"cannot reconstruct config for run {paths.run_id!r} (schema drift or "
+            f"corruption): {exc}") from exc
     target_path = Path(row["target_path"])
     if not target_path.exists():
         ledger.close()

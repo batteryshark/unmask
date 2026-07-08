@@ -147,6 +147,21 @@ class LedgerStore:
             "select status, count(*) c from work_items where run_id=? group by status", (run_id,))
         return {r["status"]: r["c"] for r in cur.fetchall()}
 
+    def count_work_items(self, run_id: str, *, operation: str | None = None,
+                         status: str | None = None) -> int:
+        """Count work items, optionally filtered by operation and/or status. Lets the
+        report count binary blind spots without conflating them with network-blocked
+        fetch items (both use status 'blocked')."""
+        sql = "select count(*) c from work_items where run_id=?"
+        params: list = [run_id]
+        if operation is not None:
+            sql += " and operation=?"
+            params.append(operation)
+        if status is not None:
+            sql += " and status=?"
+            params.append(status)
+        return self.conn.execute(sql, params).fetchone()["c"]
+
     def actionable_count(self, run_id: str) -> int:
         cur = self.conn.execute(
             "select count(*) c from work_items where run_id=? and status in ('queued','leased')",

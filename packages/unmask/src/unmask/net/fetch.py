@@ -1,23 +1,25 @@
 """Fetch a referenced URL's bytes as evidence — never execute them.
 
-Every request and every redirect hop is re-validated by `classify_url`; auto-redirect
-is disabled so a 30x can't bounce the fetcher onto an internal host behind the guard's
-back. The response is read under a hard size cap and written to disk for the scanner to
-rescan statically — exactly the same "recovered source" path as container reveal and
-the transform seam. Nothing here runs the fetched content.
+Every request and every redirect hop is re-validated by `check_url`; auto-redirect is
+disabled so a 30x can't bounce the fetcher onto an internal host. The connection is then
+PINNED to the exact IP `check_url` validated (with the original Host header / TLS SNI),
+so a rebinding DNS record can't flip the target to an internal address between the check
+and the connect. The response is read under a hard size cap and written to disk for the
+scanner to rescan statically. Nothing here runs the fetched content.
 """
 
 from __future__ import annotations
 
 import hashlib
+import http.client
 import os
 import re
-import urllib.request
+import socket
+import ssl
 from dataclasses import dataclass, field
-from urllib.error import HTTPError, URLError
 from urllib.parse import urljoin, urlsplit
 
-from unmask.net.guard import _resolve, classify_url
+from unmask.net.guard import _resolve, check_url
 
 _REDIRECT_CODES = {301, 302, 303, 307, 308}
 
@@ -46,9 +48,31 @@ class FetchResult:
     error: str | None = None
 
 
-class _NoRedirect(urllib.request.HTTPRedirectHandler):
-    def redirect_request(self, req, fp, code, msg, headers, newurl):
-        return None  # never auto-follow; we re-validate each hop ourselves
+class _PinnedHTTPConnection(http.client.HTTPConnection):
+    """Connects to a pre-validated IP while keeping the original host for the Host
+    header — closes the DNS-rebinding window (no second resolution at connect time)."""
+
+    def __init__(self, host, ip, **kw):
+        super().__init__(host, **kw)
+        self._pinned_ip = ip
+
+    def connect(self):
+        self.sock = socket.create_connection((self._pinned_ip, self.port), self.timeout,
+                                              self.source_address)
+
+
+class _PinnedHTTPSConnection(http.client.HTTPSConnection):
+    """As above; validates the TLS cert against the original hostname (SNI) while
+    connecting to the pinned IP."""
+
+    def __init__(self, host, ip, **kw):
+        super().__init__(host, **kw)
+        self._pinned_ip = ip
+
+    def connect(self):
+        sock = socket.create_connection((self._pinned_ip, self.port), self.timeout,
+                                        self.source_address)
+        self.sock = self._context.wrap_socket(sock, server_hostname=self.host)
 
 
 def _safe_name(url: str) -> str:
@@ -57,45 +81,58 @@ def _safe_name(url: str) -> str:
     return base or "fetched"
 
 
-def _read_capped(resp, max_bytes: int) -> bytes | None:
-    data = resp.read(max_bytes + 1)
-    if len(data) > max_bytes:
-        return None
-    return data
+def _request_pinned(url: str, ip: str, policy: FetchPolicy):
+    """One pinned GET. Returns the open connection + response (caller closes)."""
+    parts = urlsplit(url)
+    host = parts.hostname
+    port = parts.port or (443 if parts.scheme == "https" else 80)
+    path = parts.path or "/"
+    if parts.query:
+        path += "?" + parts.query
+    headers = {"User-Agent": policy.user_agent, "Accept": "*/*"}
+    if parts.scheme == "https":
+        conn = _PinnedHTTPSConnection(host, ip, port=port, timeout=policy.timeout,
+                                      context=ssl.create_default_context())
+    else:
+        conn = _PinnedHTTPConnection(host, ip, port=port, timeout=policy.timeout)
+    conn.request("GET", path, headers=headers)
+    return conn, conn.getresponse()
 
 
 def fetch(url: str, dest_dir: str, policy: FetchPolicy | None = None, *, resolver=_resolve) -> FetchResult:
     """Guarded GET of ``url`` into ``dest_dir``. Returns a `FetchResult`; a blocked or
     failed fetch is reported (``blocked_reason``/``error``), never raised."""
     policy = policy or FetchPolicy()
-    opener = urllib.request.build_opener(_NoRedirect)
     current = url
     redirects: list[str] = []
 
     for _hop in range(policy.max_redirects + 1):
-        safe, reason = classify_url(current, resolver=resolver)
+        safe, reason, addrs = check_url(current, resolver=resolver)
         if not safe:
             return FetchResult(url=url, final_url=current, redirects=redirects, blocked_reason=reason)
-        req = urllib.request.Request(current, headers={"User-Agent": policy.user_agent, "Accept": "*/*"})
+        conn = None
         try:
-            resp = opener.open(req, timeout=policy.timeout)
-        except HTTPError as e:
-            if e.code in _REDIRECT_CODES:
-                loc = e.headers.get("Location")
+            conn, resp = _request_pinned(current, str(addrs[0]), policy)
+            status = resp.status
+            if status in _REDIRECT_CODES:
+                loc = resp.getheader("Location")
                 if not loc:
-                    return FetchResult(url=url, status=e.code, error="redirect-without-location")
+                    return FetchResult(url=url, status=status, error="redirect-without-location",
+                                       redirects=redirects)
                 current = urljoin(current, loc)
                 redirects.append(current)
                 continue
-            return FetchResult(url=url, status=e.code, error=f"http-error-{e.code}", redirects=redirects)
-        except (URLError, OSError, ValueError) as e:
-            return FetchResult(url=url, error=f"fetch-failed: {type(e).__name__}: {e}", redirects=redirects)
-
-        with resp:
-            data = _read_capped(resp, policy.max_bytes)
-            status = getattr(resp, "status", None) or resp.getcode()
+            if status >= 400:
+                return FetchResult(url=url, status=status, error=f"http-error-{status}", redirects=redirects)
+            data = resp.read(policy.max_bytes + 1)
             ctype = resp.headers.get_content_type() if resp.headers else None
-        if data is None:
+        except (OSError, ssl.SSLError, http.client.HTTPException, ValueError) as e:
+            return FetchResult(url=url, error=f"fetch-failed: {type(e).__name__}: {e}", redirects=redirects)
+        finally:
+            if conn is not None:
+                conn.close()
+
+        if len(data) > policy.max_bytes:
             return FetchResult(url=url, status=status, error=f"too-large (> {policy.max_bytes} bytes)",
                                final_url=current, redirects=redirects)
 

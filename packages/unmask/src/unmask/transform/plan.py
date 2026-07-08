@@ -26,13 +26,15 @@ _OBF_STRUCTURAL = frozenset({"XFRM.CTRLFLOW", "XFRM.PACK", "XFRM.RENAME", "XFRM.
 # Best-to-worst decompile/unpack capability per binary kind. The engine also accepts
 # ``binary-triage``/``emit-atoms`` as a universal fallback (atoms without decompile).
 _KIND_CAPS: dict[str, tuple[str, ...]] = {
-    "native-binary": ("decompile-native",),
+    # .dll/.exe classify as native-binary (extension can't tell native from .NET), so
+    # offer both a native and a .NET decompiler — the provider's can_handle() picks.
+    "native-binary": ("decompile-native", "decompile-dotnet"),
     "jar": ("decompile-jvm", "decompile-jar"),
     "apk": ("decompile-apk", "decompile-jvm"),
     "dex": ("decompile-jvm",),
     "jvm-bytecode": ("decompile-jvm",),
     "pyc": ("decompile-python-bytecode", "decompile-pyc"),
-    "dotnet": ("decompile-dotnet",),
+    "dotnet": ("decompile-dotnet",),  # reserved for a future magic-refined kind
     "archive": ("unpack-archive", "extract-recursive"),
 }
 

@@ -44,6 +44,8 @@ def classify_kind(path: Path) -> str:
         return "manifest"
     if ext in _JVM_EXT:
         return {"jar": "jar", "apk": "apk", "dex": "dex"}.get(ext.lstrip("."), "jvm-bytecode")
+    if ext in {".pyc", ".pyo"}:
+        return "pyc"
     if ext in _ARCHIVE_EXT:
         return "archive"
     if ext in _NATIVE_EXT:
@@ -56,7 +58,7 @@ def classify_kind(path: Path) -> str:
 
 
 # Kinds that need the RE plugin to be meaningfully analysed.
-BINARY_KINDS = {"native-binary", "jar", "apk", "dex", "jvm-bytecode", "archive"}
+BINARY_KINDS = {"native-binary", "jar", "apk", "dex", "jvm-bytecode", "archive", "pyc"}
 
 
 @dataclass

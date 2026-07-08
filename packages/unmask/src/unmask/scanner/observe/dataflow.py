@@ -187,6 +187,24 @@ def _calls_without_nested(node):
     return out
 
 
+def _arg_calls(node):
+    """Every call node inside `node` (a sink's argument subtree), descending THROUGH
+    nested calls (so `exec(fetch(u).read())` yields both `fetch(u).read()` and
+    `fetch(u)`) but not into nested function bodies. Used to detect a source flowing
+    into a sink by call STRUCTURE, not by substring — a source name inside a string
+    literal or passed as a bare value is not a call and is correctly ignored."""
+    out, stack = [], [node]
+    while stack:
+        n = stack.pop()
+        k = _node_kind(n)
+        if k in _FUNC_KINDS:
+            continue
+        if k in _CALL_KINDS:
+            out.append(n)
+        stack.extend(_node_children(n))
+    return out
+
+
 def _returns_without_nested(fn_node):
     """The value-producing expressions of `fn_node`: an arrow's expression body, or
     every `return` in a block body — never descending into a nested function."""
@@ -358,12 +376,12 @@ def prove_paths(src: str, lang: str):
                               "sinkKind": "egress", "line": line})
         if not sks or args is None:
             continue
-        matched_sinks: set = set()  # (sink kinds already proven for THIS call, via var/fn)
+        matched_sinks: set = set()  # sink kinds already proven for THIS call (via a var)
+        # (parity-locked) a single-assignment tainted variable used as an argument.
         for v in _identifiers(args, data):
-            src_kinds = source_fns.get(v, set())          # v names a source-returning helper
-            if assign_count.get(v) == 1:                  # or v is a single-assignment tainted var
-                src_kinds = src_kinds | taint.get(v, set())
-            for src_kind in src_kinds:
+            if assign_count.get(v) != 1:
+                continue
+            for src_kind in taint.get(v, set()):
                 for sk in sks:
                     hit = _PROVEN.get((src_kind, sk))
                     if not hit:
@@ -375,19 +393,28 @@ def prove_paths(src: str, lang: str):
                         paths.append({"kind": kind, "shape": shape, "variable": v,
                                       "sourceKind": src_kind, "sinkKind": sk, "line": line})
                     matched_sinks.add(sk)
-        # Inline source directly in the args (no variable), e.g. exec(urlopen(u).read()).
-        # Scoped to `fetch` on purpose: the fetch-direct dropper is the gap being closed,
-        # while decode-inline (eval(atob(x))) is already flagged via BP-OBFEXEC co-
-        # occurrence — broadening here would reclassify frozen-oracle findings as proven.
-        for src_kind in _source_kinds(_node_text(args, data)) & {"fetch"}:
+        # A source that flows in via a CALL in the args, matched structurally (not by
+        # substring over the arg text, which would fire on a source name inside a string
+        # literal or a bare value passed as an argument):
+        #   - a source-returning HELPER actually called here, e.g. exec(fetch(u))  [all kinds]
+        #   - a DIRECT source call, e.g. exec(urlopen(u).read())  [fetch only: decode-inline
+        #     stays BP-OBFEXEC co-occurrence, preserving the frozen oracle]
+        arg_kinds: set = set()
+        for call in _arg_calls(args):
+            callee = _callee_text(call, data).strip()
+            arg_kinds |= source_fns.get(callee, set())
+            if "." in callee:
+                arg_kinds |= source_fns.get(callee.rsplit(".", 1)[-1], set())
+            arg_kinds |= _source_kinds(callee + "(") & {"fetch"}
+        for src_kind in arg_kinds:
             for sk in sks:
-                if sk in matched_sinks:   # already proven via a variable/helper for this call
+                if sk in matched_sinks:   # already proven via a variable for this call
                     continue
                 hit = _PROVEN.get((src_kind, sk))
                 if not hit:
                     continue
                 kind, shape = hit
-                key = (kind, "inline", line)
+                key = (kind, "call", line)
                 if key not in seen:
                     seen.add(key)
                     paths.append({"kind": kind, "shape": shape, "variable": "call argument",

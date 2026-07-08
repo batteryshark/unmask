@@ -62,36 +62,44 @@ def _resolve(host: str) -> list[ipaddress._BaseAddress]:
     return addrs
 
 
-def classify_url(url: str, *, resolver=_resolve) -> tuple[bool, str]:
-    """Return ``(is_safe, reason)``. ``reason`` is empty when safe, else why it was
-    refused. ``resolver`` is injectable so tests need no live DNS."""
+def check_url(url: str, *, resolver=_resolve):
+    """Return ``(is_safe, reason, addrs)``. ``addrs`` is the validated public IPs the
+    host resolved to (empty when unsafe) — the fetcher PINS the connection to one of
+    these so a later re-resolution (DNS rebinding) cannot redirect it to an internal
+    host. ``reason`` is empty when safe. ``resolver`` is injectable so tests need no DNS."""
     try:
         parts = urlsplit(url)
     except ValueError as exc:
-        return False, f"unparseable-url: {exc}"
+        return False, f"unparseable-url: {exc}", []
 
     if parts.scheme.lower() not in _ALLOWED_SCHEMES:
-        return False, f"scheme-not-allowed: {parts.scheme or '(none)'}"
+        return False, f"scheme-not-allowed: {parts.scheme or '(none)'}", []
     host = parts.hostname
     if not host:
-        return False, "no-host"
+        return False, "no-host", []
 
     host_l = host.lower().rstrip(".")
     if host_l in _BLOCKED_HOSTNAMES or host_l.endswith(_BLOCKED_SUFFIXES):
-        return False, f"blocked-host: {host_l}"
+        return False, f"blocked-host: {host_l}", []
 
     try:
         port = parts.port
     except ValueError:
-        return False, "invalid-port"
+        return False, "invalid-port", []
     if port is not None and port not in _ALLOWED_PORTS:
-        return False, f"port-not-allowed: {port}"
+        return False, f"port-not-allowed: {port}", []
 
     try:
         addrs = resolver(host)
     except OSError as exc:
-        return False, f"unresolvable: {exc}"
+        return False, f"unresolvable: {exc}", []
     for ip in addrs:
         if not _ip_is_public(ip):
-            return False, f"non-public-address: {ip}"
-    return True, ""
+            return False, f"non-public-address: {ip}", []
+    return True, "", addrs
+
+
+def classify_url(url: str, *, resolver=_resolve) -> tuple[bool, str]:
+    """``(is_safe, reason)`` — the boolean gate; `check_url` also returns validated IPs."""
+    ok, reason, _addrs = check_url(url, resolver=resolver)
+    return ok, reason
