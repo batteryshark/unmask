@@ -47,6 +47,47 @@
   },
   {
     "amplifiers": [
+      "Proof depth: proven intra-file taint - fetch -> exec via variable `fetch` at line 4."
+    ],
+    "claim": "Intra-file dataflow traces remote-fetched content into a code-execution sink (exec/eval/shell) in this file \u2014 the download-and-execute dropper shape, proven by a connected value path rather than mere co-occurrence. Dataflow: PROVEN (fetch -> exec); the fetch value reaches the exec via variable `fetch`, a connected path rather than mere co-occurrence.",
+    "composition": "BP-DROPPER",
+    "confidence": 0.9,
+    "confidenceLabel": "high",
+    "disproofCriteria": [
+      "The traced value is inert data (config/text), not code, and the sink treats it as data.",
+      "The fetched source is fixed, documented, and integrity-checked before it reaches the sink."
+    ],
+    "evidence": [
+      "obs-6",
+      "obs-5"
+    ],
+    "id": "mcd-2",
+    "lens": "mcd",
+    "response": {
+      "actions": [
+        "Do not execute fetched content",
+        "Pin/vendor the payload with integrity checks"
+      ],
+      "summary": "Block or sandbox until the fetched payload and integrity story are verified.",
+      "tier": 4
+    },
+    "severity": "high",
+    "title": "Download-and-execute (dataflow-proven dropper)",
+    "verification": [
+      {
+        "method": "static-source",
+        "question": "What is fetched and then executed, and who controls it?",
+        "reason": "Remote control of the executed bytes is the key risk."
+      },
+      {
+        "method": "static-source",
+        "question": "Is the fetched payload pinned by hash/signature before execution?",
+        "reason": "Integrity verification can disprove the malicious shape."
+      }
+    ]
+  },
+  {
+    "amplifiers": [
       "Remote content is executed directly rather than written and inspected first."
     ],
     "claim": "Code fetches remote content and passes it directly into a shell or dynamic evaluator. That is the direct remote-execution variant of the dropper shape; no intermediate file write is required.",
@@ -62,7 +103,7 @@
       "obs-4",
       "obs-2"
     ],
-    "id": "mcd-2",
+    "id": "mcd-3",
     "lens": "mcd",
     "response": {
       "actions": [

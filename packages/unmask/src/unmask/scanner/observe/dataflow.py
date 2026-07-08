@@ -187,6 +187,54 @@ def _calls_without_nested(node):
     return out
 
 
+def _returns_without_nested(fn_node):
+    """The value-producing expressions of `fn_node`: an arrow's expression body, or
+    every `return` in a block body — never descending into a nested function."""
+    body = _field(fn_node, "body")
+    if body is None:
+        return []
+    if _node_kind(body) not in ("statement_block", "block"):
+        return [body]  # arrow with expression body: the body IS the returned value
+    out, stack = [], [body]
+    while stack:
+        n = stack.pop()
+        k = _node_kind(n)
+        if k in _FUNC_KINDS and n is not body:
+            continue  # a return inside a nested callback is not this function's return
+        if k == "return_statement":
+            out.append(n)
+            continue
+        stack.extend(_node_children(n))
+    return out
+
+
+def _collect_source_fns(root, data):
+    """Map user function name -> the source kinds its RETURN value carries (a 1-level
+    summary). `def fetch(u): return urlopen(u).read()` -> {"fetch": {"fetch"}}. Lets the
+    sink loop treat `exec(fetch(url))` as fetch->exec even though the download hides in a
+    helper. File-flat like the rest of this pass; keyed by name."""
+    fns: dict[str, set] = {}
+    for n in _walk(root):
+        k = _node_kind(n)
+        name_node = fn_node = None
+        if k in ("function_declaration", "function_definition",
+                 "generator_function_declaration", "method_definition"):
+            name_node, fn_node = _field(n, "name"), n
+        elif k == "variable_declarator":  # const fetch = (u) => https.get(u)
+            val = _field(n, "value")
+            if val is not None and _node_kind(val) in _FUNC_KINDS:
+                name_node, fn_node = _field(n, "name"), val
+        if name_node is None or fn_node is None or _node_kind(name_node) != "identifier":
+            continue
+        kinds: set = set()
+        for expr in _returns_without_nested(fn_node):
+            kinds |= _source_kinds(_node_text(expr, data))
+        if kinds:
+            name = _node_text(name_node, data)
+            fns[name] = fns.get(name, set()) | kinds
+    return fns
+
+
 def _target_text(node, data):
     tgt = _field(node, "name", "left")
     return _node_text(tgt, data).strip() if tgt is not None else ""
@@ -255,6 +303,10 @@ def prove_paths(src: str, lang: str):
                         "line": _node_line(call),
                     })
 
+    # 1-level function summary: a helper whose return value carries a source lets a
+    # call to it act as that source (exec(fetch(u)) where fetch() downloads).
+    source_fns = _collect_source_fns(root, data)
+
     # taint fixpoint: only single-assignment variables carry taint (precision guard)
     taint: dict[str, set] = {}
     for _ in range(8):
@@ -307,9 +359,10 @@ def prove_paths(src: str, lang: str):
         if not sks or args is None:
             continue
         for v in _identifiers(args, data):
-            if assign_count.get(v) != 1:
-                continue
-            for src_kind in taint.get(v, set()):
+            src_kinds = source_fns.get(v, set())          # v names a source-returning helper
+            if assign_count.get(v) == 1:                  # or v is a single-assignment tainted var
+                src_kinds = src_kinds | taint.get(v, set())
+            for src_kind in src_kinds:
                 for sk in sks:
                     hit = _PROVEN.get((src_kind, sk))
                     if not hit:

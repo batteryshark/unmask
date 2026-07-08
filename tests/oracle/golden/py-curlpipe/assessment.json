@@ -30,7 +30,7 @@
       ],
       "memberFindingIds": [
         "mcd-1",
-        "mcd-2"
+        "mcd-3"
       ],
       "narrative": "2 malicious-code findings co-occur in `setup.py`: BP-DROPPER, BP-SUPPLY.",
       "severity": "high",
@@ -56,10 +56,10 @@
   },
   "disposition": {
     "drivers": [
-      "2 high/critical-severity finding(s) at proof-aware confidence >= 0.65",
+      "3 high/critical-severity finding(s) at proof-aware confidence >= 0.65",
       "1 cross-signal correlated cluster(s) at high/critical severity (corroborated co-location)"
     ],
-    "rationale": "Recommend quarantine: 2 high/critical-severity finding(s) at proof-aware confidence >= 0.65; 1 cross-signal correlated cluster(s) at high/critical severity (corroborated co-location). Quarantine means hold the artifact and do not install or run it until the verification questions are answered. This is a recommended next-action from the evidence, not a maliciousness verdict; severity and confidence are reported separately.",
+    "rationale": "Recommend quarantine: 3 high/critical-severity finding(s) at proof-aware confidence >= 0.65; 1 cross-signal correlated cluster(s) at high/critical severity (corroborated co-location). Quarantine means hold the artifact and do not install or run it until the verification questions are answered. This is a recommended next-action from the evidence, not a maliciousness verdict; severity and confidence are reported separately.",
     "recommendation": "quarantine",
     "thresholds": "Disposition rule (deterministic; severity and confidence kept separate): quarantine if any high/critical-severity finding has proof-aware confidence >= 0.65, or a cross-signal correlated cluster is high/critical severity. Findings whose proof depth is only same-file co-occurrence or co-location are not promoted to quarantine by enrichment alone. Review if mcd findings exist but do not meet that bar; clear if there are no mcd findings. The model never sets the disposition."
   },
@@ -71,7 +71,7 @@
   "enrichmentProviders": [],
   "executiveSummary": {
     "author": "engine",
-    "text": "Disposition: QUARANTINE. 2 malicious-code finding(s); highest severity high, highest confidence 0.7 (severity and confidence are independent). Strongest correlation: 2 malicious-code findings co-occur in `setup.py`: BP-DROPPER, BP-SUPPLY. Verify next: (1) What does the install hook fetch, decode, or execute, and from where? (2) Is the destination maintainer-controlled and documented? (3) Does behavior differ under CI/sandbox?"
+    "text": "Disposition: QUARANTINE. 3 malicious-code finding(s); highest severity high, highest confidence 0.9 (severity and confidence are independent). Strongest correlation: 2 malicious-code findings co-occur in `setup.py`: BP-DROPPER, BP-SUPPLY. Verify next: (1) What does the install hook fetch, decode, or execute, and from where? (2) Is the destination maintainer-controlled and documented? (3) Does behavior differ under CI/sandbox?"
   },
   "findings": [
     {
@@ -122,6 +122,47 @@
     },
     {
       "amplifiers": [
+        "Proof depth: proven intra-file taint - fetch -> exec via variable `fetch` at line 4."
+      ],
+      "claim": "Intra-file dataflow traces remote-fetched content into a code-execution sink (exec/eval/shell) in this file \u2014 the download-and-execute dropper shape, proven by a connected value path rather than mere co-occurrence. Dataflow: PROVEN (fetch -> exec); the fetch value reaches the exec via variable `fetch`, a connected path rather than mere co-occurrence.",
+      "composition": "BP-DROPPER",
+      "confidence": 0.9,
+      "confidenceLabel": "high",
+      "disproofCriteria": [
+        "The traced value is inert data (config/text), not code, and the sink treats it as data.",
+        "The fetched source is fixed, documented, and integrity-checked before it reaches the sink."
+      ],
+      "evidence": [
+        "obs-6",
+        "obs-5"
+      ],
+      "id": "mcd-2",
+      "lens": "mcd",
+      "response": {
+        "actions": [
+          "Do not execute fetched content",
+          "Pin/vendor the payload with integrity checks"
+        ],
+        "summary": "Block or sandbox until the fetched payload and integrity story are verified.",
+        "tier": 4
+      },
+      "severity": "high",
+      "title": "Download-and-execute (dataflow-proven dropper)",
+      "verification": [
+        {
+          "method": "static-source",
+          "question": "What is fetched and then executed, and who controls it?",
+          "reason": "Remote control of the executed bytes is the key risk."
+        },
+        {
+          "method": "static-source",
+          "question": "Is the fetched payload pinned by hash/signature before execution?",
+          "reason": "Integrity verification can disprove the malicious shape."
+        }
+      ]
+    },
+    {
+      "amplifiers": [
         "Remote content is executed directly rather than written and inspected first."
       ],
       "claim": "Code fetches remote content and passes it directly into a shell or dynamic evaluator. That is the direct remote-execution variant of the dropper shape; no intermediate file write is required.",
@@ -137,7 +178,7 @@
         "obs-4",
         "obs-2"
       ],
-      "id": "mcd-2",
+      "id": "mcd-3",
       "lens": "mcd",
       "response": {
         "actions": [
@@ -202,6 +243,36 @@
       "relationships": []
     },
     {
+      "atom": "NETW.HTTP",
+      "confidence": 0.75,
+      "evidence": {
+        "matchedText": "urllib.request.urlopen(u).read().decode",
+        "summary": null
+      },
+      "id": "obs-6",
+      "location": {
+        "line": 3,
+        "path": "loader.py"
+      },
+      "method": "source-callee-ast",
+      "relationships": []
+    },
+    {
+      "atom": "LOAD.EVAL",
+      "confidence": 0.6,
+      "evidence": {
+        "matchedText": "exec",
+        "summary": null
+      },
+      "id": "obs-5",
+      "location": {
+        "line": 4,
+        "path": "loader.py"
+      },
+      "method": "source-callee-ast",
+      "relationships": []
+    },
+    {
       "atom": "EXEC.SHELL",
       "confidence": 0.8,
       "evidence": {
@@ -228,9 +299,9 @@
       "BP-SUPPLY"
     ],
     "filesScanned": 2,
-    "findingCount": 2,
-    "highestConfidence": 0.7,
-    "highestConfidenceLabel": "medium",
+    "findingCount": 3,
+    "highestConfidence": 0.9,
+    "highestConfidenceLabel": "high",
     "highestSeverity": "high",
     "relatedByLens": {},
     "relatedFindingCount": 0

