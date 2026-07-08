@@ -117,6 +117,11 @@ def pending_questions(run_dir: str) -> list:
     return pending_questions_of(run_dir)
 
 
+def project_status(run_dir: str) -> dict:
+    from unmask.run import project_rollup
+    return project_rollup(run_dir)
+
+
 def read_report(run_dir: str, fmt: str = "md"):
     from unmask.storage.paths import resolve_run_dir
     if fmt not in {"md", "json", "html"}:
@@ -184,6 +189,13 @@ def build_server():
         """List a run's pending questions (when status is needs_input). Answer them by
         passing {id: value} to `resume`."""
         return pending_questions(run_dir)
+
+    @server.tool()
+    def project(run_dir: str) -> dict:
+        """The whole investigation's state — what's covered and what's OPEN across every
+        run in this project (pending questions, blocked binaries, open leads, needs-input
+        runs). The orchestrator's read for deciding the next move."""
+        return project_status(run_dir)
 
     @server.tool()
     def get_report(run_dir: str, format: str = "md"):

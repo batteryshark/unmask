@@ -154,6 +154,22 @@ def _cmd_questions(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_project(args: argparse.Namespace) -> int:
+    from unmask.run import project_rollup
+
+    roll = project_rollup(args.run_dir)
+    if args.json:
+        print(json.dumps(roll, indent=2))
+        return 0
+    o = roll["open"]
+    print(f"Project:  {roll['projectId']}   ({roll['runCount']} run(s))")
+    print(f"Open:     {o['pendingQuestions']} question(s), {o['blockedBinaries']} blocked "
+          f"binary, {o['openLeads']} open lead(s), {o['needsInput']} needs-input run(s)")
+    for r in roll["runs"]:
+        print(f"  {r.get('status', '?'):11} {r.get('disposition', ''):11} {r.get('runId', '')}")
+    return 0
+
+
 def _cmd_mcp(args: argparse.Namespace) -> int:
     from unmask.mcp_server import main as mcp_main
 
@@ -257,6 +273,11 @@ def build_parser() -> argparse.ArgumentParser:
     q.add_argument("--run-dir", required=True)
     q.add_argument("--json", action="store_true")
     q.set_defaults(func=_cmd_questions)
+
+    proj = sub.add_parser("project", help="rollup of open work across a project's runs")
+    proj.add_argument("--run-dir", required=True)
+    proj.add_argument("--json", action="store_true")
+    proj.set_defaults(func=_cmd_project)
 
     mcp = sub.add_parser("mcp", help="run the MCP server (stdio) exposing scan/resume/report")
     mcp.set_defaults(func=_cmd_mcp)

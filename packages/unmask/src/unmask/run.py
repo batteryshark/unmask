@@ -115,6 +115,42 @@ def resume_mcd(run_dir: str, *, review_model=None, answers: dict | None = None) 
     return _drive(paths, config, target_path, ledger, review_model=review_model, resume=True)
 
 
+def project_rollup(run_dir: str) -> dict:
+    """Aggregate OPEN WORK across every run in a project — the orchestrator's
+    'what's covered, what's outstanding' read. Given any run dir, walks its sibling
+    runs and rolls up per-run status/disposition + the open items (pending questions,
+    blocked binaries, open leads). This is what lets an orchestrator pivot on the whole
+    investigation rather than one sweep."""
+    rd = Path(run_dir).resolve()
+    project_dir = rd.parents[1]  # .../projects/<project-id>/runs/<run> -> .../projects/<pid>
+    project_id = project_dir.name
+    runs: list[dict] = []
+    totals = {"pendingQuestions": 0, "blockedBinaries": 0, "openLeads": 0, "needsInput": 0}
+    for run_json in sorted(project_dir.glob("runs/*/run.json")):
+        try:
+            meta = json.loads(run_json.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        entry = {"runId": meta.get("runId"), "status": meta.get("status"),
+                 "disposition": meta.get("disposition"), "runDir": str(run_json.parent)}
+        db = run_json.parent / "run.db"
+        rid = meta.get("runId")
+        if db.is_file() and rid:
+            led = LedgerStore(str(db))
+            try:
+                entry["pendingQuestions"] = led.count_pending_questions(rid)
+                entry["blockedBinaries"] = led.count_work_items(rid, operation="scan-binary", status="blocked")
+                entry["openLeads"] = led.count_work_items(rid, operation="lead", status="deferred")
+            finally:
+                led.close()
+            for k in ("pendingQuestions", "blockedBinaries", "openLeads"):
+                totals[k] += entry.get(k, 0)
+            if meta.get("status") == "needs_input":
+                totals["needsInput"] += 1
+        runs.append(entry)
+    return {"projectId": project_id, "runCount": len(runs), "open": totals, "runs": runs}
+
+
 def pending_questions_of(run_dir: str) -> list[dict]:
     """The questions a `needs_input` run left pending — what an orchestrator answers,
     then passes back to `resume_mcd(answers=...)`."""
