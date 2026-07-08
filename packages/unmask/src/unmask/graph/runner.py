@@ -1,48 +1,36 @@
-"""Graph state and dependencies.
+"""Graph state and dependencies — unmask's domain extension of muster's spine.
 
-State is small and transient (run identity + counters); deps carry the heavy
-objects (ledger, config, toolchain, optional review model). The graph itself is
-assembled in `nodes.py` with pydantic-graph's GraphBuilder.
+muster owns the generic ``GraphState`` (run identity + counters) and ``GraphDeps``
+(ledger + paths + resume/scratch). unmask subclasses both: state adds nothing yet;
+deps add the MCD config, the discovered RE toolchain, an optional injected review
+model, and the per-role ``model_for`` resolver. The graph itself is assembled in
+``nodes.py`` with pydantic-graph's GraphBuilder.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from pathlib import Path
+from dataclasses import dataclass
 from typing import Any
 
+from muster import GraphDeps, GraphState
+
 from unmask.config import MCDConfig
-from unmask.ledger import LedgerStore
 from unmask.providers import ToolchainStatus
-from muster.paths import RunPaths
 
 
-@dataclass
-class MCDGraphState:
-    """Small, transient run context (mirrors docs/design.md MCDGraphState)."""
-    run_id: str
-    project_id: str
-    run_dir: Path
-    db_path: Path
-    target_path: Path
-    iteration: int = 0
-    max_iterations: int = 50
+@dataclass(kw_only=True)
+class MCDGraphState(GraphState):
+    """unmask's transient run context — muster's identity/counter fields, unchanged."""
 
 
-@dataclass
-class MCDGraphDeps:
-    """Heavy objects live here, not in state."""
-    ledger: LedgerStore
+@dataclass(kw_only=True)
+class MCDGraphDeps(GraphDeps):
+    """Heavy objects live here, not in state. Adds the MCD config, the RE toolchain, and
+    an optional injected pydantic-ai model for agentic review (tests pass TestModel;
+    None resolves from UNMASK_REVIEW_* at review time)."""
     config: MCDConfig
-    paths: RunPaths
     toolchain: ToolchainStatus
-    # Optional injected pydantic-ai model for agentic review (tests pass TestModel;
-    # None resolves from UNMASK_REVIEW_* at review time).
     review_model: Any = None
-    # True when re-driving an existing run (unmask resume): the run dir's caches
-    # (fetched bytes, decompiled trees) are reused instead of redone.
-    resume: bool = False
-    scratch: dict[str, Any] = field(default_factory=dict)
 
     def model_for(self, role: str):
         """Resolve the pydantic-ai model for a bounded model step's ROLE

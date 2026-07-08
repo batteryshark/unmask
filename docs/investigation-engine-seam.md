@@ -75,4 +75,40 @@ observation/finding tables and the four hooks vary. That is the whole seam.
 4. **Graduate** to its own private repo, consumed as a versioned dependency (each project
    is already a separate repo). Vendor as a *dependency*, not as data — it's code.
 
-*Naming is deferred; the common noun is "a ledgered investigation runtime."*
+*Named **muster** (assemble + account-for = coverage). The common noun is "a ledgered
+investigation runtime."*
+
+## Extraction status (what has landed, and two boundary refinements)
+
+Extracted in place to `packages/muster`, unmask depending on it:
+
+- **Slice 1 — run identity + paths** (`muster.paths`): content-addressed project/run ids,
+  the run-dir layout, `resolve_run_dir`.
+- **Slice 2 — the ledger core** (`muster.Ledger`): the generic spine tables (runs,
+  artifacts, work_items, graph_events, reports, questions, answers) + the coverage/queue/
+  resume API. A consumer registers its domain tables and resume-reset set by composition —
+  `LedgerStore(Ledger)` passes `extra_schema=` + `reset_tables=` and adds only its
+  domain record/count methods.
+- **Slice 3 — graph scaffolding + patterns** (`muster.graph`): base `GraphState`/
+  `GraphDeps` (kw_only, so a subclass can add required fields), `atomic_write`, phase-entry
+  `enter`, the durable-question `ask`, and the `WorkDispatcher` (operation→handler registry
+  + lease/dispatch drain step).
+
+Two refinements to the boundary above, learned by doing the move:
+
+1. **muster owns the work-queue *mechanism*, not the pydantic-graph *nodes*.** Nodes are
+   concrete-typed (`BaseNode[State, Deps, Out]`) and their edges are inferred from return
+   annotations, so a node necessarily names the consumer's own phases (a drained
+   `ProcessWorkQueue` hands off to the consumer's `RenderReport`). The generic part is the
+   `WorkDispatcher` the node *calls*; the thin node stays with the consumer. "New
+   operations plug in as handlers without touching the graph" holds via the registry.
+2. **The MCP server is a domain adapter, not spine.** unmask's tools (`scan`/`resume`/
+   `get_report`/`questions`/`project`/…) are almost entirely domain-shaped; the only
+   generic residue is FastMCP construction boilerplate. Forcing a "muster MCP builder"
+   over that would be a leaky abstraction at the wrong altitude, so each consumer keeps
+   its own MCP surface.
+
+Still consumer-side, generalising next: the *lead* producer/lifecycle and the
+*adversarial-verify* quorum vote (currently coupled to unmask's residue/reviews shapes),
+and per-role model routing. Then: point a second consumer (lucent or rekit-factory) at
+`muster` to test the contract across domains, and graduate to its own private repo.

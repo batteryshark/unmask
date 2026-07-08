@@ -23,6 +23,11 @@ from pathlib import Path
 
 from pydantic_graph import BaseNode, End, Graph, GraphBuilder, GraphRunContext
 
+from muster import WorkDispatcher
+from muster import ask as _ask
+from muster import atomic_write as _atomic_write
+from muster import enter as _enter
+
 from unmask.graph.runner import MCDGraphDeps, MCDGraphState
 from unmask.inventory.tree import BINARY_KINDS, build_tree, classify_kind
 from unmask.ledger.store import stable_key
@@ -44,31 +49,8 @@ _MAX_LEADS_PER_ROUND = 8
 
 _Ctx = GraphRunContext[MCDGraphState, MCDGraphDeps]
 
-
-def _atomic_write(path: Path, text: str) -> None:
-    tmp = path.with_suffix(path.suffix + ".tmp")
-    tmp.write_text(text, encoding="utf-8")
-    os.replace(tmp, path)
-
-
-def _enter(ctx: _Ctx, name: str) -> None:
-    ctx.state.iteration += 1
-    ctx.deps.ledger.event(ctx.state.run_id, name, "enter")
-
-
-def _ask(ctx: _Ctx, *, node: str, kind: str, prompt: str, options=None) -> str | None:
-    """Ask a DURABLE question — never a blocking wait. Returns the answer if one was
-    injected (a prior resume), else records the question as pending and returns None; the
-    caller handles None by deferring that path. The run finishes `needs_input` while any
-    question is unanswered, and an orchestrator answers + resumes. Idempotent: the id is
-    content-addressed, so the same question maps to the same answer across re-drives."""
-    qid = stable_key(prompt, kind, node)
-    answer = ctx.deps.ledger.get_answer(ctx.state.run_id, qid)
-    if answer is not None:
-        return answer
-    ctx.deps.ledger.ask_question(ctx.state.run_id, qid=qid, node=node, kind=kind,
-                                 prompt=prompt, options=options)
-    return None
+# muster provides _atomic_write / _enter / _ask (imported above); this module keeps the
+# domain nodes and their handlers.
 
 
 @dataclass
@@ -583,13 +565,12 @@ class ProcessWorkQueue(BaseNode[MCDGraphState, MCDGraphDeps, dict]):
                            {"stopped": "max-work-items", "processed": processed,
                             "remaining": d.ledger.actionable_count(s.run_id)})
             return RenderReport()
-        item = d.ledger.lease_next_actionable(s.run_id)
+        item = _DISPATCHER.run_one(ctx)  # lease + dispatch to a registered handler
         if item is None:
             d.ledger.event(s.run_id, "ProcessWorkQueue", "note",
                            {"drained": True, "processed": processed})
             return RenderReport()
         d.scratch["wq_processed"] = processed + 1
-        _dispatch_work(ctx, dict(item))
         return ProcessWorkQueue()
 
 
@@ -743,27 +724,12 @@ def _handle_lead(ctx: _Ctx, item: dict) -> None:
         result={"note": "lead proposed but not executed (interrupted); tracked for follow-up."})
 
 
-_WORK_HANDLERS = {
+# unmask's work-queue registry — the operations ProcessWorkQueue drains. muster owns the
+# lease/dispatch mechanism (WorkDispatcher); new operations plug in here as handlers.
+_DISPATCHER = WorkDispatcher({
     "scan-binary": _handle_scan_binary,
     "lead": _handle_lead,
-}
-
-
-def _dispatch_work(ctx: _Ctx, item: dict) -> None:
-    """Route one leased work item to its handler; an unknown operation is deferred with
-    a note (never left leased — that would stall the loop)."""
-    op = item.get("operation")
-    handler = _WORK_HANDLERS.get(op)
-    try:
-        if handler is not None:
-            handler(ctx, item)
-        else:
-            ctx.deps.ledger.set_work_status(item["id"], "deferred",
-                result={"note": f"No queue handler for operation {op!r}."})
-    except Exception as exc:  # a handler bug must not stall the loop
-        ctx.deps.ledger.set_work_status(item["id"], "failed", error=f"{type(exc).__name__}: {exc}")
-        ctx.deps.ledger.event(ctx.state.run_id, "ProcessWorkQueue", "error",
-                              {"operation": op, "error": repr(exc)})
+})
 
 
 # --- helpers ---------------------------------------------------------------

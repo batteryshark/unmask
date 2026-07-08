@@ -13,6 +13,14 @@ here; the graph scaffolding follows.
 
 from __future__ import annotations
 
+from muster.graph import (
+    GraphDeps,
+    GraphState,
+    WorkDispatcher,
+    ask,
+    atomic_write,
+    enter,
+)
 from muster.ledger import Ledger, SCHEMA_VERSION, new_id, stable_key
 from muster.paths import (
     RunPaths,
@@ -24,5 +32,6 @@ from muster.paths import (
 
 __all__ = [
     "Ledger", "SCHEMA_VERSION", "new_id", "stable_key",
+    "GraphState", "GraphDeps", "WorkDispatcher", "atomic_write", "enter", "ask",
     "RunPaths", "compute_project_id", "compute_run_id", "new_run_paths", "resolve_run_dir",
 ]
