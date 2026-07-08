@@ -389,7 +389,7 @@ class ProposeLeads(BaseNode[MCDGraphState, MCDGraphDeps, dict]):
             return ReviewFindings()
         try:
             from unmask.leads import build_lead_proposer
-            proposer = build_lead_proposer(d.review_model)
+            proposer = build_lead_proposer(d.model_for("proposer"))
         except Exception as exc:  # no model configured — honest coverage note, never a stop
             d.scratch["leads"] = {"skipped": f"no lead model configured ({exc!r})"}
             d.ledger.event(s.run_id, "ProposeLeads", "note", {"skipped": repr(exc)})
@@ -472,8 +472,8 @@ class ReviewFindings(BaseNode[MCDGraphState, MCDGraphDeps, dict]):
         if not (d.config.review or d.config.verify) or scan is None or not scan.findings:
             return CoverageGate()
         try:
-            from unmask.reviewers import ReviewModelConfig, review_assessment_batched
-            model = d.review_model or ReviewModelConfig.from_env().build_model()
+            from unmask.reviewers import review_assessment_batched
+            model = d.model_for("reviewer")
         except Exception as exc:
             d.ledger.event(s.run_id, "ReviewFindings", "note", {"skipped": repr(exc)})
             d.scratch["review_note"] = (
@@ -494,7 +494,7 @@ class ReviewFindings(BaseNode[MCDGraphState, MCDGraphDeps, dict]):
         if d.config.verify:
             from unmask.reviewers import adjudicate, verify_downgrades
             reviews, verifications = await asyncio.to_thread(
-                partial(verify_downgrades, reviews, assessment, model=model))
+                partial(verify_downgrades, reviews, assessment, model=d.model_for("verifier")))
             if verifications:
                 overlay = adjudicate(assessment, reviews)  # re-adjudicate over adjusted reviews
                 d.scratch["verifications"] = {
@@ -871,7 +871,7 @@ async def _post_report_qa(ctx: _Ctx, assessment: dict, reviews, reports_dir) -> 
     try:
         from unmask.qa import suggest_rule_tunings
         suggestions = await asyncio.to_thread(
-            partial(suggest_rule_tunings, assessment, reviews, model=d.review_model))
+            partial(suggest_rule_tunings, assessment, reviews, model=d.model_for("qa")))
     except Exception as exc:  # QA is advisory; never fail the run
         d.ledger.event(s.run_id, "PostReportQA", "note", {"error": repr(exc)})
         return

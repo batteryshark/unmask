@@ -40,7 +40,13 @@ class MCDConfig:
     # perspective-diverse skeptics before they stand — guards recall against a single
     # silent model opinion. Implies review; off by default (costs N model calls/downgrade).
     verify: bool = False
+    # Default review-model spec ([provider:]model_id), and optional PER-ROLE overrides.
+    # Roles: reviewer / verifier / proposer (leads) / qa. A role not in `models` falls
+    # back to `model`, then to UNMASK_REVIEW_* env. This is where speed/cost tuning lives
+    # — a cheap local model for high-volume steps (proposer), a strong one for the
+    # low-volume/high-stakes ones (verifier). Provider endpoints/keys stay env/harness.
     model: str | None = None
+    models: dict[str, str] = field(default_factory=dict)
     # Post-report rule-tuning QA: off | rules (advisory suggestions).
     post_report_qa: str = "off"
     # Adaptive investigation leads: the model proposes bounded follow-ups on residue
@@ -56,6 +62,6 @@ class MCDConfig:
 
     def config_hash(self) -> str:
         """Stable hash of the config with volatile/secret-ish fields dropped."""
-        stable = {k: v for k, v in asdict(self).items() if k not in {"run_id", "model"}}
+        stable = {k: v for k, v in asdict(self).items() if k not in {"run_id", "model", "models"}}
         blob = json.dumps(stable, sort_keys=True).encode("utf-8")
         return hashlib.sha256(blob).hexdigest()[:12]

@@ -43,3 +43,15 @@ class MCDGraphDeps:
     # (fetched bytes, decompiled trees) are reused instead of redone.
     resume: bool = False
     scratch: dict[str, Any] = field(default_factory=dict)
+
+    def model_for(self, role: str):
+        """Resolve the pydantic-ai model for a bounded model step's ROLE
+        (reviewer/verifier/proposer/qa). An injected `review_model` overrides every role
+        (tests, or a single-model run); otherwise `config.models[role]` → `config.model`
+        → UNMASK_REVIEW_* env. This is the per-role speed/cost lever — cheap for
+        proposer, strong for verifier — while endpoints/keys stay in env/harness."""
+        if self.review_model is not None:
+            return self.review_model
+        from unmask.reviewers.config import ReviewModelConfig
+        spec = (self.config.models or {}).get(role) or self.config.model
+        return ReviewModelConfig.from_spec(spec).build_model()

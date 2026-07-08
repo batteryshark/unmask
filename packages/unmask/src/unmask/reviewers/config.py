@@ -43,6 +43,18 @@ class ReviewModelConfig:
     provider: str
 
     @classmethod
+    def from_spec(cls, spec: str | None, **kw) -> "ReviewModelConfig":
+        """Resolve a `[provider:]model_id` spec (e.g. 'lmstudio:qwen2.5' or 'gpt-4o'),
+        falling back to env for base_url/api_key. `spec=None` is pure env resolution —
+        used by per-role model routing so a role can override just the model."""
+        if not spec:
+            return cls.from_env(**kw)
+        provider, sep, model = spec.partition(":")
+        if sep and model:
+            return cls.from_env(provider=provider, model=model, **kw)
+        return cls.from_env(model=provider, **kw)  # bare model id
+
+    @classmethod
     def from_env(cls, *, model=None, base_url=None, api_key=None, provider=None) -> "ReviewModelConfig":
         provider = provider or os.environ.get("UNMASK_REVIEW_PROVIDER", "custom")
         model = model or os.environ.get("UNMASK_REVIEW_MODEL")

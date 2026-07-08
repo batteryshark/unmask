@@ -13,6 +13,20 @@ import sys
 from pathlib import Path
 
 
+_ROLE_ALIASES = {"leads": "proposer", "review": "reviewer", "verify": "verifier"}
+
+
+def _parse_models(spec: str | None) -> dict:
+    """Parse `role=[provider:]model,...` into a role→spec map (roles: reviewer/verifier/
+    proposer/qa; friendly aliases leads/review/verify accepted)."""
+    out: dict[str, str] = {}
+    for pair in (spec or "").split(","):
+        role, sep, model = pair.strip().partition("=")
+        if sep and model.strip():
+            out[_ROLE_ALIASES.get(role.strip(), role.strip())] = model.strip()
+    return out
+
+
 def _cmd_run(args: argparse.Namespace) -> int:
     import os
 
@@ -37,8 +51,11 @@ def _cmd_run(args: argparse.Namespace) -> int:
         network=args.network,
         tool_profile=args.tool_profile,
         review=args.review or args.post_report_qa != "off",  # QA needs review judgments
+        verify=getattr(args, "verify", False),
+        leads=getattr(args, "leads", False),
         post_report_qa=args.post_report_qa,
         model=getattr(args, "model", None),
+        models=_parse_models(getattr(args, "models", None)),
     )
     result = run_mcd(args.target, config)
 
@@ -174,9 +191,16 @@ def build_parser() -> argparse.ArgumentParser:
                      choices=["static", "source", "binary", "full"])
     run.add_argument("--review", action="store_true",
                      help="agentic adjudication of findings (needs unmask[review] + UNMASK_REVIEW_*)")
+    run.add_argument("--verify", action="store_true",
+                     help="adversarially verify review downgrades before they stand (implies --review)")
+    run.add_argument("--leads", action="store_true",
+                     help="model-proposed adaptive leads on residue (needs a model)")
     run.add_argument("--model", default=None,
-                     help="review model as [provider:]model_id, e.g. lmstudio:qwen2.5-27b or "
+                     help="default review model as [provider:]model_id, e.g. lmstudio:qwen2.5-27b or "
                           "openai:gpt-4o (sets UNMASK_REVIEW_PROVIDER/MODEL; implies nothing without --review)")
+    run.add_argument("--models", default=None,
+                     help="per-role model overrides: role=[provider:]model,... e.g. "
+                          "proposer=lmstudio:m3,verifier=zai:glm (roles: reviewer/verifier/proposer/qa)")
     run.add_argument("--post-report-qa", default="off", choices=["off", "rules"],
                      help="advisory rule-tuning feedback over reviewed findings (implies --review)")
     run.add_argument("--json", action="store_true")
