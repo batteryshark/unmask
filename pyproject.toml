@@ -11,7 +11,10 @@
 members = ["packages/*"]
 
 [tool.uv.sources]
-muster = { workspace = true }
+# muster graduated to its own private repo (github.com/batteryshark/muster) — consumed
+# here as a pinned git dependency, not a workspace member. Bump `rev` to adopt a new
+# muster release.
+muster = { git = "https://github.com/batteryshark/muster.git", rev = "e2f7668c5927a10e8a97cb6a34b3eca5bbf4fc39" }
 lucent = { workspace = true }
 unmask = { workspace = true }
 unmask-re = { workspace = true }
@@ -33,5 +36,5 @@ dev = ["pytest>=8"]
 # test files and vendored deps, so `packages` stays in norecursedirs; an explicit
 # testpath into packages/muster/tests is still collected (norecursedirs only blocks
 # recursion, not the initial paths).
-testpaths = ["tests", "packages/muster/tests", "packages/lucent/tests"]
+testpaths = ["tests", "packages/lucent/tests"]
 norecursedirs = ["packages", ".venv", "reference", "_vendor"]

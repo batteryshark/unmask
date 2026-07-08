@@ -12,7 +12,6 @@ resolution-markers = [
 members = [
     "lucent",
     "mcd-workspace",
-    "muster",
     "unmask",
     "unmask-re",
 ]
@@ -912,7 +911,7 @@ dev = [
 ]
 
 [package.metadata]
-requires-dist = [{ name = "muster", editable = "packages/muster" }]
+requires-dist = [{ name = "muster", git = "https://github.com/batteryshark/muster.git?rev=e2f7668c5927a10e8a97cb6a34b3eca5bbf4fc39" }]
 
 [package.metadata.requires-dev]
 dev = [{ name = "pytest", specifier = ">=8" }]
@@ -994,30 +993,10 @@ wheels = [
 [[package]]
 name = "muster"
 version = "0.0.1"
-source = { editable = "packages/muster" }
+source = { git = "https://github.com/batteryshark/muster.git?rev=e2f7668c5927a10e8a97cb6a34b3eca5bbf4fc39#e2f7668c5927a10e8a97cb6a34b3eca5bbf4fc39" }
 dependencies = [
     { name = "pydantic-graph" },
 ]
-
-[package.optional-dependencies]
-model = [
-    { name = "pydantic-ai" },
-]
-
-[package.dev-dependencies]
-dev = [
-    { name = "pytest" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "pydantic-ai", marker = "extra == 'model'", specifier = ">=0.0.1" },
-    { name = "pydantic-graph", specifier = ">=0.0.1" },
-]
-provides-extras = ["model"]
-
-[package.metadata.requires-dev]
-dev = [{ name = "pytest", specifier = ">=8" }]
 
 [[package]]
 name = "openai"
@@ -2156,7 +2135,7 @@ review = [
 [package.metadata]
 requires-dist = [
     { name = "mcp", marker = "extra == 'mcp'", specifier = ">=1.0.0" },
-    { name = "muster", editable = "packages/muster" },
+    { name = "muster", git = "https://github.com/batteryshark/muster.git?rev=e2f7668c5927a10e8a97cb6a34b3eca5bbf4fc39" },
     { name = "pydantic", specifier = ">=2.7" },
     { name = "pydantic-ai", marker = "extra == 'review'", specifier = ">=0.0.1" },
     { name = "pydantic-graph", specifier = ">=0.0.1" },
