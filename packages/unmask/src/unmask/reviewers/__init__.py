@@ -15,12 +15,14 @@ from unmask.reviewers.batch import (
     review_assessment_batched,
 )
 from unmask.reviewers.config import ReviewConfigError, ReviewModelConfig
-from unmask.reviewers.schemas import FindingReview, FollowupRequest
+from unmask.reviewers.schemas import FindingReview, FollowupRequest, VerifyVote
+from unmask.reviewers.verify import build_verifier, verify_downgrades
 
 __all__ = [
     "build_reviewer", "review_finding", "adjudicate", "review_assessment",
     "build_batch_reviewer", "review_assessment_batched",
+    "verify_downgrades", "build_verifier",
     "SINGLE_REVIEW_THRESHOLD", "BATCH_SIZE", "MAX_BATCH_TURNS",
     "ReviewConfigError", "ReviewModelConfig",
-    "FindingReview", "FollowupRequest",
+    "FindingReview", "FollowupRequest", "VerifyVote",
 ]

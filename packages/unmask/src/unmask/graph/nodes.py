@@ -469,7 +469,7 @@ class ReviewFindings(BaseNode[MCDGraphState, MCDGraphDeps, dict]):
         d, s = ctx.deps, ctx.state
         _enter(ctx, "ReviewFindings")
         scan = d.scratch.get("scan")
-        if not d.config.review or scan is None or not scan.findings:
+        if not (d.config.review or d.config.verify) or scan is None or not scan.findings:
             return CoverageGate()
         try:
             from unmask.reviewers import ReviewModelConfig, review_assessment_batched
@@ -487,6 +487,25 @@ class ReviewFindings(BaseNode[MCDGraphState, MCDGraphDeps, dict]):
         # output-size limit. Falls back to single-finding review for small counts.
         reviews, overlay = await asyncio.to_thread(
             partial(review_assessment_batched, assessment, model=model))
+
+        # Adversarially verify DOWNGRADES before they stand: a quorum of skeptics must
+        # uphold a refute/suppress/deescalate or the finding is kept (needs_human), never
+        # silently cleared. This is where recall would otherwise rest on one model call.
+        if d.config.verify:
+            from unmask.reviewers import adjudicate, verify_downgrades
+            reviews, verifications = await asyncio.to_thread(
+                partial(verify_downgrades, reviews, assessment, model=model))
+            if verifications:
+                overlay = adjudicate(assessment, reviews)  # re-adjudicate over adjusted reviews
+                d.scratch["verifications"] = {
+                    "checked": len(verifications),
+                    "overturned": sum(1 for v in verifications if v["outcome"] == "overturned"),
+                    "records": verifications,
+                }
+                d.ledger.event(s.run_id, "VerifyDowngrades", "note",
+                               {"checked": len(verifications),
+                                "overturned": sum(1 for v in verifications if v["outcome"] == "overturned")})
+
         d.scratch["reviews"] = reviews  # for post-report rule-tuning QA
         model_name = getattr(d.config, "model", None) or type(model).__name__
         for r in reviews:
@@ -577,6 +596,9 @@ class RenderReport(BaseNode[MCDGraphState, MCDGraphDeps, dict]):
         leads = d.scratch.get("leads")
         if leads:
             sections["leads"] = leads
+        verifications = d.scratch.get("verifications")
+        if verifications:
+            sections["verifications"] = verifications
 
         reports_dir = d.paths.reports_dir
         reports_dir.mkdir(parents=True, exist_ok=True)

@@ -46,3 +46,12 @@ class FindingReview(BaseModel):
     disproof_checked: list[str] = Field(default_factory=list)
     references: list[str] = Field(default_factory=list)
     followups: list[FollowupRequest] = Field(default_factory=list)
+
+
+class VerifyVote(BaseModel):
+    """One skeptic's vote on whether a review DOWNGRADE (refute/suppress/deescalate)
+    should stand. `overturn` means the downgrade is wrong and the finding is real; the
+    verifier defends the finding, never re-confirms maliciousness on its own."""
+
+    decision: Literal["uphold", "overturn"]
+    rationale: str

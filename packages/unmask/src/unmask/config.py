@@ -36,6 +36,10 @@ class MCDConfig:
 
     # Agentic adjudication overlay (requires unmask[review]); off by default.
     review: bool = False
+    # Adversarially verify review DOWNGRADES (refute/suppress/deescalate) with a quorum of
+    # perspective-diverse skeptics before they stand — guards recall against a single
+    # silent model opinion. Implies review; off by default (costs N model calls/downgrade).
+    verify: bool = False
     model: str | None = None
     # Post-report rule-tuning QA: off | rules (advisory suggestions).
     post_report_qa: str = "off"
