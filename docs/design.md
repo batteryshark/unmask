@@ -2,85 +2,65 @@
 
 Status: design spec
 
-Audience: contributors working on unmask, a durable, graph-driven malicious-code
-analysis system rather than a harness-local auto-loop.
+Audience: contributors working on unmask, a malicious-code detector.
 
-Primary decision: build MCD around a Pydantic Graph workflow whose durable source
-of truth is a SQLite work ledger. The graph controls phases. The ledger controls
-coverage and resumability. Pydantic AI agents perform bounded judgment. The
-existing deterministic MCD scanner and report shape remain the quality bar.
+unmask answers one question: is this code doing something malicious, and can you prove it?
+It reads a target (source, packages, and, with the RE add-on, binaries), records
+judgment-free observations, composes them into deterministic BP-* malicious-code shapes,
+and produces a report that keeps severity and confidence separate, states a disposition
+(clear / review / quarantine), and shows its evidence, disproof criteria, verification
+steps, and coverage blind spots. It runs offline and executes no target code by default.
+
+The deterministic scanner and its report are the quality bar. Bounded model steps assist
+(reviewing evidence, proposing follow-ups) but never author a verdict or a coverage claim.
+The durable, coverage-gated, resumable runtime is provided by muster (see "Built on
+muster" below); this document is about detection.
 
 ## Executive Summary
 
-The current MCD report is the part worth preserving. It already has the right
-product model:
+The report is the part worth preserving. It already has the right product model:
 
 * static observations first;
 * BP-* malicious-code compositions over those observations;
 * severity and confidence kept separate;
 * disposition as a deterministic recommendation, not a model verdict;
-* evidence, disproof criteria, verification steps, reachability, enrichment,
-  coverage notes, and HTML/Markdown/JSON output;
+* evidence, disproof criteria, verification steps, reachability, enrichment, coverage
+  notes, and HTML/Markdown/JSON output;
 * optional agentic adjudication layered over the deterministic scan.
 
-unmask does not turn this into "ask an agent if the code is malicious".
-It makes the deterministic MCD idea more capable:
+unmask does not turn this into "ask an agent if the code is malicious". It makes the
+deterministic MCD idea more capable:
 
 * discover targets, containers, binaries, and follow-up work incrementally;
 * unpack and decompile when tools are available;
 * ask a model to review bounded evidence instead of a whole repository;
 * fetch limited remote content only with explicit policy;
-* resume after crashes;
-* prove coverage from ledger state;
+* resume after crashes and prove coverage from ledger state;
 * produce the same quality report, with better coverage and review provenance.
 
-The recommended shape is:
+The layers:
 
-```text
-Pydantic Graph
-  controls the workflow:
-  discover -> unpack/decompile -> scan -> compose -> review -> follow up -> report
-
-SQLite Ledger
-  controls truth:
-  runs, artifacts, work items, evidence refs, findings, judgments, approvals,
-  tool runs, network fetches, graph events, reports
-
-Vendored Parallax Taxonomy
-  controls meaning:
-  ontology atoms, MCD indicators, BP-* compositions, verification guidance,
-  response tiers, enrichment signals
-
-Sandbox Provider
-  controls execution:
-  static read-only by default, isolated tool execution for untrusted inputs,
-  optional dynamic/network work only by policy
-
-Reporter
-  controls the product:
-  preserve the current assessment/report contract and add coverage/review sections
-```
-
-This is not a normal agent loop. The graph can loop, branch, fan out, and return
-to earlier phases, but every return is driven by structured state. The model
-does not decide completion. The ledger does.
+* Detection (unmask's core): observations -> BP-* compositions -> disposition -> report.
+* Meaning (vendored Parallax taxonomy): ontology atoms, MCD indicators, BP-* compositions,
+  verification guidance, response tiers, enrichment signals.
+* RE transform seam (unmask-re): unpack / deobfuscate / decompile untrusted input under a
+  sandbox policy, then rescan what it recovers.
+* Runtime (muster): the phase graph, the SQLite coverage/resume ledger, the work-queue
+  drain. The ledger's coverage gate, not the model, decides when a run is done.
 
 ## Goals
 
 1. Preserve the existing report quality.
-2. Make coverage durable, auditable, resumable, and externally inspectable.
+2. Make coverage durable, auditable, resumable, and externally inspectable (provided by muster).
 3. Let discovery add new work while the run is already in progress.
-4. Use Pydantic Graph for explicit workflow shape and visualization.
-5. Use Pydantic AI agents only for bounded review tasks with typed outputs or
-   record tools.
-6. Vendor the Parallax taxonomy as data, not as monolithic engine logic.
-7. Support sandboxed unpacking, decompilation, byte inspection, and optional
-   dynamic verification.
-8. Support limited network retrieval for evidence, especially cases like
-   `curl ... | sh`, without executing fetched content.
-9. Package or locate external tools in a predictable, policy-aware way.
-10. Keep the default run static, offline, and safe.
-11. Expose a CLI and MCP-compatible tool surface.
+4. Use bounded model steps only for review-style tasks with typed outputs.
+5. Vendor the Parallax taxonomy as data, not as monolithic engine logic.
+6. Support sandboxed unpacking, decompilation, byte inspection, and optional dynamic verification.
+7. Support limited network retrieval for evidence, especially cases like `curl ... | sh`,
+   without executing fetched content.
+8. Package or locate external tools in a predictable, policy-aware way.
+9. Keep the default run static, offline, and safe.
+10. Expose a CLI and MCP-compatible tool surface.
 
 ## Non-Goals
 
@@ -90,9 +70,10 @@ does not decide completion. The ledger does.
 * No unbounded network.
 * No silent best-effort decompilation. Missing tool coverage must be reported.
 * No large binary toolchain bundled into the core package by default.
-* No requirement that every host have Docker, Ghidra, Java, .NET, npm, or uv
-  installed before a basic static scan works.
+* No requirement that every host have Docker, Ghidra, Java, .NET, npm, or uv installed
+  before a basic static scan works.
 * No re-baking of Parallax taxonomy rules into a monolithic scanner.
+
 
 ## Current MCD Contract To Preserve
 
@@ -170,7 +151,7 @@ state. Those must never be copied into a distributed package or report bundle.
 Recommended vendored package shape:
 
 ```text
-src/prlx_mcd/taxonomy/vendored/
+src/unmask/taxonomy/vendored/
   taxonomy-manifest.json
   ARCHITECTURE.md
   README.md
@@ -278,66 +259,25 @@ The graph runner can evolve without rewriting the taxonomy. The only shared
 contract is typed references: atom ids, indicator families, composition ids,
 verification families, response tiers, and enrichment signal ids.
 
-## Core Architectural Decision
+## Built on muster
 
-Use Pydantic Graph for workflow, not coverage.
+unmask does not design its own runtime. It runs on muster
+(github.com/batteryshark/muster), a ledgered investigation runtime that owns the phase
+graph, the per-run SQLite ledger (the coverage and resume oracle), the work-queue drain,
+and run identity/layout. The ledger's coverage gate, not the model, decides when a run is
+complete. See the muster repo for that runtime design.
 
-Pydantic Graph gives us typed nodes, explicit branching, graph rendering,
-manual/stepwise execution, dependencies, decisions, fanout, joins, and state.
-Those are useful for MCD because MCD is naturally a workflow:
+unmask is a muster consumer: it registers its own domain on top of the shared spine.
 
-```text
-inventory target
-  -> expand containers
-  -> scan source
-  -> classify binaries
-  -> decompile selected artifacts
-  -> rescan recovered source
-  -> compose MCD findings
-  -> review uncertain/high-risk findings
-  -> fetch limited remote content when approved
-  -> add follow-up work
-  -> recompute disposition
-  -> render report
-```
+* Domain tables: observations (atoms) and findings (BP-* compositions), plus judgments and
+  rule-tuning suggestions, layered onto muster's spine (runs, artifacts, work items,
+  events, reports, questions/answers).
+* Work operations and handlers: scan-source, scan-binary, deobfuscate/decompile
+  transforms, fetch, and adaptive leads.
+* A coverage predicate: taxonomy rules across artifacts, enumerated and worked off.
 
-But graph state is not the coverage oracle. A graph run can crash, a node can be
-retried, and parallel execution makes native state snapshots hard. The durable
-coverage oracle is the SQLite ledger.
+Everything below is unmask's domain: what it detects, how it decides, and how it proves it.
 
-Therefore:
-
-* Graph state holds transient run context: `run_id`, config, current batch,
-  sandbox provider, model profile, and counters.
-* SQLite holds durable run truth: artifacts, work items, statuses, findings,
-  judgments, approvals, tool runs, fetched content, report metadata.
-* Every node starts by reading ledger state and ends by recording events.
-* Completion is allowed only when the ledger coverage gate says terminal.
-
-## Why Not A Harness Loop
-
-A harness loop is an adapter behavior: "when the agent goes idle, inject another
-prompt". It can work for Pi or OpenCode. It is not the best core for MCD.
-
-For MCD, the core needs:
-
-* deterministic coverage math;
-* structured dependencies between target x operation work items;
-* resumability independent of an agent session;
-* bounded review tasks;
-* explicit sandbox and network policy;
-* repeatable report generation from persisted evidence.
-
-A harness loop gives continuation. It does not, by itself, give coverage.
-
-The graph-plus-ledger model gives continuation and coverage:
-
-```text
-Graph asks: what phase should run next?
-Ledger answers: what work exists, what is actionable, and can we finish?
-Agent answers: what is the judgment for this bounded item?
-Reporter answers: what should the user do?
-```
 
 ## Package Shape
 
@@ -348,7 +288,7 @@ packages/mcd-graph/
   pyproject.toml
   scripts/
     vendor_taxonomy.py
-  src/prlx_mcd/
+  src/unmask/
     __init__.py
     cli.py
     config.py
@@ -498,7 +438,7 @@ the command needed to resume.
 Python API:
 
 ```python
-from prlx_mcd import MCDConfig, run_mcd, resume_mcd
+from unmask import MCDConfig, run_mcd, resume_mcd
 
 result = run_mcd(
     target=".",
@@ -531,8 +471,8 @@ separate state in the MCP server process.
 ## Tree View Tool
 
 Most agents need a fast structural view before they can reason well about a
-target. MCD should provide that directly instead of making every harness shell
-out to `find`, `tree`, or ad hoc recursive listing code.
+target. unmask provides that directly instead of shelling out to `find`, `tree`,
+or ad hoc recursive listing code.
 
 The tree view has three jobs:
 
@@ -605,837 +545,6 @@ Tree output must be bounded. It should collapse high-volume directories such as
 `node_modules`, `.git`, build outputs, virtual environments, caches, and vendor
 trees unless the user explicitly expands them. The report should include a
 compact tree summary and link to the full tree artifact.
-
-## Run Storage And SQLite UX
-
-MCD should assume users may run many scans at once. The default should avoid a
-single shared SQLite database that every scan writes to. The simplest reliable
-model is one SQLite database per run, stored next to the reports and artifacts
-that database describes.
-
-Default storage layout:
-
-```text
-.mcd/
-  projects/
-    index.db
-    <project-id>/
-      project.json
-      runs/
-        <started-at>-<run-hash>/
-          run.json
-          run.db
-          reports/
-            report.html
-            report.md
-            report.json
-            qa.json
-            qa.md
-          artifacts/
-            tree/
-          fetched/
-          tool-output/
-          logs/
-          tmp/
-```
-
-`run.db` is the authoritative ledger for that run. Reports are rendered
-artifacts. `run.json` is a small status file for cheap discovery and recovery:
-
-```json
-{
-  "runId": "run_20260707_153012_ab12cd34ef56",
-  "projectId": "target-repo_91b3f6a412d0",
-  "status": "running",
-  "dbPath": "run.db",
-  "startedAt": "...",
-  "completedAt": null,
-  "targetPath": "/abs/path/to/target",
-  "reportPaths": {
-    "html": "reports/report.html",
-    "markdown": "reports/report.md",
-    "json": "reports/report.json"
-  }
-}
-```
-
-Project identity should be stable enough to group repeated scans of the same
-target without leaking unnecessary path detail into global indexes:
-
-```text
-project_slug = sanitize(basename(git_root or target_root))
-project_hash = sha256(
-  realpath(target_root)
-  + "\n" + realpath(git_root or "")
-  + "\n" + git_remote_origin_url_or_empty
-)[:12]
-
-project_id = project_slug + "_" + project_hash
-```
-
-Run identity should be unique per invocation:
-
-```text
-run_seed = sha256(realpath(target_path) + target_kind + selected_fast_metadata)
-config_hash = sha256(normalized_config_without_secrets)[:12]
-run_hash = sha256(project_id + run_seed + config_hash + started_at + nonce)[:12]
-run_id = "run_" + started_at_compact + "_" + run_hash
-```
-
-The heavier `target_fingerprint` can be computed during inventory and stored in
-the ledger after the run directory already exists.
-
-The first implementation should use per-run databases:
-
-* no write contention between scans;
-* no accidental cross-run state mutation;
-* easy archival and cleanup;
-* report bundles can be copied as a directory;
-* resume is just `unmask resume --run-dir <dir>`.
-
-SQLite settings for each `run.db`:
-
-```sql
-pragma journal_mode = wal;
-pragma synchronous = normal;
-pragma busy_timeout = 5000;
-pragma foreign_keys = on;
-```
-
-The optional `.mcd/projects/index.db` is only an index for UX commands such as
-`unmask list`, `unmask status --run-id`, and `mcd clean`. It should contain project id,
-run id, status, timestamps, target path, run dir, and report paths. The run must
-not depend on this index for correctness. If the index is missing or corrupt,
-MCD can rebuild it by walking `.mcd/projects/*/runs/*/run.json`.
-
-Concurrency rules:
-
-* many scans can run concurrently because they each own a run directory;
-* the project index uses WAL and short transactions only;
-* run-local temporary files stay under `tmp/`;
-* tool outputs are written under `tool-output/<work-item-id>/`;
-* fetched content is written under `fetched/<network-fetch-id>/`;
-* final reports are written to temporary names and atomically renamed.
-
-The shared project database idea can be revisited later, but it should not be
-the first build. If a shared DB is added, it must use explicit worker leases,
-WAL, `busy_timeout`, stale lease recovery, and run ownership ids. That is useful
-for a service, not necessary for the local tool.
-
-UX requirements:
-
-```text
-$ unmask run .
-Run:      run_20260707_153012_ab12cd34ef56
-Project:  my-repo_91b3f6a412d0
-Dir:      .mcd/projects/my-repo_91b3f6a412d0/runs/20260707-153012-ab12cd34ef56
-Report:   .mcd/projects/my-repo_91b3f6a412d0/runs/20260707-153012-ab12cd34ef56/reports/report.html
-Resume:   unmask resume --run-dir .mcd/projects/my-repo_91b3f6a412d0/runs/20260707-153012-ab12cd34ef56
-```
-
-Useful commands:
-
-```text
-unmask list
-unmask list --project my-repo_91b3f6a412d0
-unmask status --run-id run_20260707_153012_ab12cd34ef56
-unmask status --run-dir .mcd/projects/.../runs/...
-unmask report --run-id run_20260707_153012_ab12cd34ef56 --format html
-mcd clean --failed --older-than 7d
-mcd clean --completed --older-than 30d --keep-reports
-```
-
-Retention should be explicit. The tool should not silently delete run databases,
-fetched artifacts, or reports. `mcd clean` should show what it will remove unless
-`--yes` is supplied.
-
-## Ledger Model
-
-Use SQLite first. It is enough for local runs, durable resumption, and later
-service migration. JSON files are tempting but become painful once we have leases,
-parallel review, tool-run provenance, approvals, and report history.
-
-### Tables
-
-`runs`
-
-```text
-id text primary key
-project_id text not null
-target_path text not null
-target_root text not null
-target_hash text
-target_fingerprint text
-storage_root text not null
-run_dir text not null
-status text not null
-created_at text not null
-updated_at text not null
-completed_at text
-config_json text not null
-taxonomy_manifest_json text not null
-model_profile_json text
-sandbox_profile_json text
-network_policy_json text
-coverage_json text
-summary_json text
-error text
-```
-
-Statuses:
-
-```text
-queued -> running -> completed
-                  -> partial
-                  -> blocked
-                  -> failed
-                  -> canceled
-```
-
-`artifacts`
-
-```text
-id text primary key
-run_id text not null
-kind text not null
-path text not null
-logical_path text not null
-parent_artifact_id text
-sha256 text
-size_bytes integer
-media_type text
-language text
-container_member text
-origin text not null
-metadata_json text not null
-created_at text not null
-```
-
-Example artifact kinds:
-
-```text
-source-file
-manifest
-target-tree
-archive
-asar
-jar
-apk
-dex
-class
-dotnet-assembly
-native-binary
-script
-decompiled-source
-fetched-content
-report
-qa-report
-```
-
-`work_items`
-
-```text
-id text primary key
-run_id text not null
-stable_key text not null
-target_artifact_id text
-target text not null
-operation text not null
-category text not null
-title text not null
-status text not null
-priority integer not null default 100
-depends_on_json text not null
-payload_json text not null
-attempts integer not null default 0
-lease_owner text
-lease_expires_at text
-created_at text not null
-updated_at text not null
-terminal_at text
-result_json text
-error text
-unique(run_id, stable_key)
-```
-
-Statuses:
-
-```text
-queued -> leased -> done
-                 -> failed
-                 -> needs_review
-                 -> needs_evidence
-                 -> deferred
-                 -> blocked
-```
-
-Terminal states:
-
-```text
-done, failed, needs_review, deferred, blocked
-```
-
-`needs_review` is terminal for the automated run but not a success. It means the
-report can be generated honestly with an open review requirement.
-
-Operations:
-
-```text
-inventory
-expand-container
-scan-source
-scan-binary
-decompile
-rescan-derived-source
-compose-mcd
-review-finding
-review-lead
-fetch-remote-content
-decode-payload
-dynamic-plan
-dynamic-execute
-network-capture
-render-report
-```
-
-`observations`
-
-```text
-id text primary key
-run_id text not null
-artifact_id text
-atom text not null
-confidence real not null
-method text not null
-rule_id text
-taxonomy_refs_json text
-location_json text not null
-evidence_json text not null
-relationships_json text not null
-created_at text not null
-```
-
-`findings`
-
-```text
-id text primary key
-run_id text not null
-lens text not null
-composition text
-title text not null
-claim text not null
-severity text not null
-confidence real not null
-confidence_label text
-evidence_json text not null
-disproof_json text not null
-verification_json text not null
-response_json text not null
-amplifiers_json text
-attenuators_json text
-taxonomy_refs_json text not null
-created_at text not null
-```
-
-`taxonomy_refs`
-
-```text
-id text primary key
-run_id text not null
-ref_type text not null
-ref_id text not null
-taxonomy_path text not null
-taxonomy_sha256 text
-owner_kind text not null
-owner_id text not null
-created_at text not null
-```
-
-Example `ref_type` values:
-
-```text
-atom
-idiom
-mcd-indicator
-mcd-composition
-mcd-verification
-mcd-response
-mcd-signal
-investigation-method
-```
-
-`evidence_refs`
-
-```text
-id text primary key
-run_id text not null
-work_item_id text
-finding_id text
-observation_id text
-artifact_id text
-path text
-start_line integer
-end_line integer
-snippet text
-snippet_sha256 text
-redaction_json text
-created_at text not null
-```
-
-`judgments`
-
-```text
-id text primary key
-run_id text not null
-work_item_id text not null
-finding_id text
-reviewer text not null
-model text
-verdict text not null
-reviewed_confidence real
-response_tier integer
-excluded_from_disposition integer not null default 0
-justification text not null
-disproof_checked_json text not null
-references_json text not null
-usage_json text
-created_at text not null
-```
-
-Verdicts:
-
-```text
-confirm
-escalate
-deescalate
-refute
-suppress
-needs_evidence
-needs_human
-```
-
-`qa_suggestions`
-
-```text
-id text primary key
-run_id text not null
-source_report_id text
-kind text not null
-status text not null
-finding_ids_json text not null
-rule_ids_json text not null
-taxonomy_refs_json text not null
-suggestion text not null
-rationale text not null
-evidence_json text not null
-estimated_noise_reduction text
-risk_json text not null
-created_by text not null
-created_at text not null
-```
-
-QA suggestion kinds:
-
-```text
-raise-threshold
-add-attenuator
-add-disproof
-split-rule
-merge-rule
-add-allowlist-pattern
-improve-evidence-requirement
-update-taxonomy-guidance
-needs-human-rule-review
-```
-
-Statuses:
-
-```text
-suggested
-accepted
-rejected
-deferred
-implemented-outside-run
-```
-
-QA suggestions are advisory. They never mutate scanner rules, taxonomy docs, or
-prior findings during the same scan.
-
-`approvals`
-
-```text
-id text primary key
-run_id text not null
-kind text not null
-status text not null
-request_json text not null
-policy_json text not null
-decision_json text
-created_at text not null
-decided_at text
-```
-
-Approval kinds:
-
-```text
-network-fetch
-registry-query
-tool-install
-decompile-large-artifact
-dynamic-execution
-network-capture
-send-evidence-to-model
-```
-
-`tool_runs`
-
-```text
-id text primary key
-run_id text not null
-work_item_id text
-tool_id text not null
-tool_version text
-command_json text not null
-sandbox_provider text
-policy_json text not null
-started_at text not null
-completed_at text
-exit_code integer
-stdout_ref text
-stderr_ref text
-outputs_json text not null
-error text
-```
-
-`network_fetches`
-
-```text
-id text primary key
-run_id text not null
-work_item_id text
-url text not null
-method text not null
-status_code integer
-content_type text
-sha256 text
-artifact_id text
-policy_json text not null
-approval_id text
-created_at text not null
-```
-
-`graph_events`
-
-```text
-id text primary key
-run_id text not null
-node text not null
-event text not null
-payload_json text not null
-created_at text not null
-```
-
-`reports`
-
-```text
-id text primary key
-run_id text not null
-format text not null
-path text not null
-sha256 text
-created_at text not null
-```
-
-Optional `index.db` tables:
-
-`projects_index`
-
-```text
-project_id text primary key
-project_slug text not null
-project_hash text not null
-target_root text not null
-git_root text
-git_remote text
-created_at text not null
-updated_at text not null
-```
-
-`runs_index`
-
-```text
-run_id text primary key
-project_id text not null
-run_dir text not null
-db_path text not null
-status text not null
-target_path text not null
-created_at text not null
-updated_at text not null
-completed_at text
-report_html_path text
-report_md_path text
-report_json_path text
-summary_json text
-```
-
-These index tables are convenience caches. The run-local database remains the
-source of truth.
-
-### Work Item Stable Keys
-
-Stable keys must be derived from durable identity:
-
-```text
-sha256(run_id-neutral target identity + operation + payload identity)
-```
-
-Examples:
-
-```text
-source:src/install.js:scan-source
-artifact:sha256:<hash>:scan-binary
-finding:mcd-007:review-finding
-url:https://example.com/install.sh:fetch-remote-content
-jar:sha256:<hash>:jadx
-```
-
-Never derive stable keys from list index or model output order.
-
-## Graph Design
-
-Use Pydantic Graph as the phase controller. The graph state is intentionally
-small:
-
-```python
-from dataclasses import dataclass
-from pathlib import Path
-
-@dataclass
-class MCDGraphState:
-    run_id: str
-    project_id: str
-    run_dir: Path
-    db_path: Path
-    target_path: Path
-    iteration: int = 0
-    max_iterations: int = 50
-```
-
-Dependencies carry heavy objects:
-
-```python
-@dataclass
-class MCDGraphDeps:
-    ledger: LedgerStore
-    scanner: Scanner
-    taxonomy: TaxonomyProvider
-    sandbox: SandboxProvider
-    tool_resolver: ToolResolver
-    reviewer: Reviewer | None
-    reporter: Reporter
-```
-
-### High-Level Flow
-
-```text
-InitializeRun
-  -> LoadTaxonomy
-  -> PrepareSandbox
-  -> InventoryTarget
-  -> ExpandContainers
-  -> ResolveToolchain
-  -> ProcessWorkQueue
-  -> ComposeFindings
-  -> EnqueueReviews
-  -> ReviewBatch
-  -> HandleFollowups
-  -> CoverageGate
-      -> ProcessWorkQueue
-      -> RenderReport
-          -> PostReportQA
-          -> Completed
-      -> HumanBlocked
-      -> Failed
-```
-
-### Node Responsibilities
-
-`InitializeRun`
-
-* Resolve or create project id and run id.
-* Create or resume run directory.
-* Create or open run-local `run.db`.
-* Create or update optional project `index.db`.
-* Create or resume `runs`.
-* Validate target path.
-* Persist config and model profile.
-* Create initial `inventory` work item.
-* Record `graph_events`.
-
-`LoadTaxonomy`
-
-* Resolve taxonomy provider from `--taxonomy-root`, `PRLX_TAXONOMY_ROOT`, or
-  packaged vendored taxonomy.
-* Validate required MCD roots exist.
-* Persist taxonomy manifest in `runs.taxonomy_manifest_json`.
-* Record graph event with manifest id, source commit, and file hash summary.
-
-`PrepareSandbox`
-
-* Select sandbox provider.
-* Validate read/write mounts.
-* Validate network policy.
-* Validate run-scoped writable directories.
-* Record sandbox capabilities and limits in `runs.sandbox_profile_json`.
-
-`InventoryTarget`
-
-* Walk files without executing target code.
-* Classify source, manifest, archive, bytecode, native binary, packed artifact.
-* Insert `artifacts`.
-* Generate bounded target tree artifacts for agent/report orientation.
-* Enqueue scan, expansion, and binary triage work items.
-
-`ExpandContainers`
-
-* Expand supported source containers: zip, tar, tgz, asar, jar/apk when safe.
-* Record extracted files as child artifacts with stable `container!member`
-  logical paths.
-* Enqueue `scan-source`, `scan-binary`, or `decompile` work as applicable.
-* Never execute extracted content.
-
-`ResolveToolchain`
-
-* Run `unmask tools doctor` internally.
-* Record available tools and missing capabilities.
-* Convert missing tools into coverage notes and optional `tool-install`
-  approvals.
-
-`ProcessWorkQueue`
-
-* Lease a bounded batch of actionable non-terminal work.
-* Dispatch operation-specific workers.
-* Record every tool run, failure, output artifact, and new work item.
-* Keep concurrency bounded and policy-aware.
-
-`StaticScan`
-
-* Run source scanner on source artifacts.
-* Insert observations.
-* Avoid duplicate observations using stable observation keys.
-
-`BinaryTriage`
-
-* Identify format, strings, imports, sections, embedded paths, entropy, magic.
-* Enqueue decompilation if the artifact and policy support it.
-* Emit observations with method `binary-strings`, `binary-imports`, etc.
-* Attenuate confidence for string-only evidence.
-
-`Decompile`
-
-* Use tool resolver to select provider:
-  * JADX for APK/DEX/JAR where appropriate.
-  * dex2jar plus Java decompiler when useful.
-  * Ghidra or rizin/radare2 for native binaries.
-  * ILSpy for .NET assemblies.
-  * CFR/Procyon/Fernflower for Java bytecode if JADX is not the best fit.
-* Run tools in sandbox.
-* Record outputs as `decompiled-source` artifacts.
-* Enqueue `rescan-derived-source`.
-* Record blind spots when tools are missing or fail.
-
-`ComposeFindings`
-
-* Apply MCD BP-* readings over observations and inventory.
-* Load composition, verification, disproof, response, and signal metadata from
-  the taxonomy provider.
-* Persist `taxonomy_refs` for produced findings.
-* Build or update scan report.
-* Build assessment draft.
-* Preserve deterministic disposition.
-
-`EnqueueReviews`
-
-* Select findings that need review:
-  * high/critical severity;
-  * confidence near disposition thresholds;
-  * binary-string-only findings;
-  * dynamic/network verification requested;
-  * decompiler failures near suspicious artifacts;
-  * user-requested review budget.
-* Create `review-finding` work items.
-
-`ReviewBatch`
-
-* Invoke Pydantic AI reviewer on one finding or a small batch.
-* Use typed output for single-item review.
-* Use record tools for batch review so coverage is not limited by final output.
-* Reviewers may propose follow-up work, but the graph validates and enqueues it.
-* Record judgments and usage.
-
-`NetworkFetch`
-
-* Fetch approved remote content as evidence.
-* Save body as `fetched-content` artifact.
-* Enqueue scan/decode work for fetched content.
-* Never execute fetched content.
-
-`HandleFollowups`
-
-* Convert review output, fetch results, decompiler outputs, and new observations
-  into additional work items.
-* Deduplicate by stable key.
-
-`CoverageGate`
-
-* Ask the ledger:
-  * Are non-terminal actionable items left?
-  * Are only blocked or human-review items left?
-  * Did this iteration make progress?
-  * Have we hit iteration, cost, item, or time limits?
-* Return the next graph node:
-  * `ProcessWorkQueue` if more work is actionable.
-  * `RenderReport` if all automated work is terminal.
-  * `HumanBlocked` if approvals or human review are required.
-  * `Failed` for invariant failures.
-
-`RenderReport`
-
-* Rebuild the assessment from persisted observations/findings/judgments.
-* Include taxonomy manifest and taxonomy references in JSON.
-* Render HTML, Markdown, and JSON.
-* Write reports under `run_dir/reports/`.
-* Persist reports as artifacts and rows in `reports`.
-* Update `run.json` and optional `index.db` with final report paths.
-
-`PostReportQA`
-
-* Optional node controlled by `--post-report-qa`.
-* Read the rendered report plus ledger rows for suppressed, refuted, and
-  deescalated findings.
-* Cluster repeated suppress/deescalate reasons by rule id, taxonomy ref, atom,
-  detector, artifact type, and evidence shape.
-* Suggest rule or taxonomy changes that may reduce future noise.
-* Persist suggestions in `qa_suggestions`.
-* Render `reports/qa.json` and `reports/qa.md`.
-* Never alter findings, judgments, rule packs, or taxonomy files in-place.
-
-### Graph Loop Semantics
-
-The graph may loop. That is intentional.
-
-But every loop must satisfy at least one condition:
-
-* new work item inserted;
-* existing work item moved to terminal;
-* approval requested;
-* report rendered;
-* post-report QA rendered;
-* explicit terminal stop reached.
-
-If no progress occurs for `idle_rounds` iterations, the run becomes `blocked` or
-`partial`, not "complete".
 
 ## Pydantic AI Reviewer Design
 
@@ -1914,7 +1023,7 @@ Tool resolver order:
 Suggested cache:
 
 ```text
-~/.cache/prlx-mcd/tools/<tool>/<version>/<platform>/
+~/.cache/unmask/tools/<tool>/<version>/<platform>/
 ```
 
 The cache must store:
@@ -2309,19 +1418,9 @@ postReportQa:
 
 ## External References
 
-* Pydantic Graph overview and graph builder docs:
-  <https://pydantic.dev/docs/ai/graph/graph/> and
-  <https://pydantic.dev/docs/ai/graph/builder/>
-* Pydantic durable execution overview:
-  <https://pydantic.dev/docs/ai/integrations/durable_execution/overview/>
-* Pydantic AI Harness and CodeMode:
-  <https://pydantic.dev/docs/ai/harness/overview/> and
-  <https://pydantic.dev/docs/ai/harness/code-mode/>
-* Monty:
+* muster, the runtime unmask is built on:
+  <https://github.com/batteryshark/muster>
+* Monty (sandbox provider):
   <https://github.com/pydantic/monty>
 * Local Parallax taxonomy source:
   `parallax-taxonomy`
-* Current local MCD report skill:
-  `parallax-goalpacks/skills/mcd-report/SKILL.md`
-* Current local ledger-harness note:
-  `agent-harness-pattern.md`
