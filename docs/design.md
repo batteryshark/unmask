@@ -1,8 +1,8 @@
-# MCD Pydantic Graph + Ledger Rebuild Design
+# unmask Design
 
 Status: design spec
 
-Audience: implementers rebuilding the MCD tool as a durable, graph-driven
+Audience: contributors working on unmask, a durable, graph-driven malicious-code
 analysis system rather than a harness-local auto-loop.
 
 Primary decision: build MCD around a Pydantic Graph workflow whose durable source
@@ -23,8 +23,8 @@ product model:
   coverage notes, and HTML/Markdown/JSON output;
 * optional agentic adjudication layered over the deterministic scan.
 
-The rebuild should not turn this into "ask an agent if the code is malicious".
-The rebuild should make the existing MCD idea more capable:
+unmask does not turn this into "ask an agent if the code is malicious".
+It makes the deterministic MCD idea more capable:
 
 * discover targets, containers, binaries, and follow-up work incrementally;
 * unpack and decompile when tools are available;
@@ -2181,180 +2181,6 @@ The run fails only for system invariants:
     automatically.
 12. Noise-reduction suggestions must state false-negative risk.
 
-## Implementation Plan
-
-### Milestone 0: Report And Taxonomy Contract Lock
-
-* Capture current MCD JSON/Markdown/HTML fixtures.
-* Capture current Parallax taxonomy roots needed by MCD:
-  * ontology atoms and idioms;
-  * MCD indicators;
-  * BP-* compositions;
-  * verification guidance;
-  * response tiers;
-  * enrichment signals.
-* Define vendored taxonomy manifest schema.
-* Add compatibility tests for:
-  * disposition;
-  * confidence/severity separation;
-  * review overlay;
-  * binary coverage notes;
-  * dynamic verification "not run" contract.
-* Define report schema version.
-
-Acceptance:
-
-* New renderer can reproduce current fixture semantics.
-* Vendored taxonomy resolves BP-* compositions and required indicator families.
-* No `.git`, `.venv`, cache, or local test residue appears in vendored taxonomy.
-
-### Milestone 1: Run Storage And SQLite Ledger
-
-* Implement project id and run id generation.
-* Implement `.mcd/projects/<project>/runs/<run>/` layout.
-* Implement `run.json`.
-* Implement optional project `index.db`.
-* Implement schema and migrations.
-* Implement work item enqueue/lease/transition.
-* Implement artifact, observation, finding, judgment, approval, tool run, report
-  storage.
-* Implement coverage summary.
-* Store taxonomy manifest and taxonomy references.
-
-Acceptance:
-
-* Crash/reopen test proves run can resume.
-* Duplicate enqueue test proves stable keys work.
-* Many concurrent scans create separate run directories and do not contend on a
-  shared run database.
-* `unmask list` can rebuild its index from run directories.
-
-### Milestone 2: Graph Skeleton
-
-* Implement graph state/deps.
-* Implement `InitializeRun`, `InventoryTarget`, `StaticScan`,
-  `ComposeFindings`, `CoverageGate`, `RenderReport`.
-* Implement `LoadTaxonomy` and fail early when required taxonomy data is absent.
-* Generate bounded target tree artifacts during inventory.
-* Run static source-only MCD with no model and no network.
-
-Acceptance:
-
-* `unmask run fixture/evil-npm` produces report from ledger state.
-* Report includes project id, run id, run directory, and taxonomy manifest.
-* `unmask tree fixture/evil-npm` and `unmask tree --run-id <id>` return bounded
-  text/JSON views.
-
-### Milestone 3: Sandbox Provider Interface
-
-* Implement `local_readonly`.
-* Implement subprocess provider for trusted tools with timeouts and output caps.
-* Add Monty provider for reviewer code/tool batching.
-* Add OpenShell provider stub behind feature flag until API is verified.
-
-Acceptance:
-
-* Tool execution policy is recorded.
-* Default scan uses no command execution unless needed.
-
-### Milestone 4: Tool Doctor And Tool Resolver
-
-* Implement manifests.
-* Implement `unmask tools doctor`.
-* Implement BYO/PATH/cache resolution.
-* Implement missing-tool coverage notes.
-
-Acceptance:
-
-* Report states decompilation coverage accurately on a host with no decompilers.
-
-### Milestone 5: Container Expansion And Binary Triage
-
-* Implement archive/asar/source-container expansion.
-* Implement binary metadata and string triage.
-* Enqueue derived source rescans.
-
-Acceptance:
-
-* ASAR/zip fixture reveals nested malicious JS and scans it.
-
-### Milestone 6: Decompiler Integration
-
-* Add JADX/dex2jar/Java decompiler.
-* Add ILSpy.
-* Add Ghidra/rizin optional providers.
-* Add strict sandbox and output limits.
-
-Acceptance:
-
-* Missing decompiler gives coverage note.
-* Available decompiler produces derived source artifact and rescan.
-
-### Milestone 7: Agentic Review
-
-* Implement Pydantic AI reviewer schemas.
-* Implement one-finding review.
-* Implement batch record-tool review.
-* Fold judgments into adjudication overlay.
-* Define post-report QA schemas, but keep QA disabled by default.
-
-Acceptance:
-
-* Reviewer cannot drop findings silently.
-* Reviewed disposition recomputes from judgment state.
-
-### Milestone 8: Network Fetch Policy
-
-* Implement approval table and CLI.
-* Implement `fetch-only` mode.
-* Implement auto-approval for narrow public HTTP(S) fetches.
-* Rescan fetched content.
-
-Acceptance:
-
-* `curl URL | sh` fixture fetches and scans URL content when policy allows.
-* Same fixture reports blocked fetch when policy denies.
-* Fetched content is never executed.
-
-### Milestone 9: MCP Surface
-
-* Implement MCP server over same CLI/API.
-* Add tools: scan, resume, status, approve, report, tools_doctor.
-
-Acceptance:
-
-* MCP scan and CLI scan produce the same ledger/report outputs.
-
-### Milestone 10: Full Report Polish
-
-* Add ledger coverage section.
-* Add taxonomy version and references section.
-* Add target tree summary and links to tree artifacts.
-* Add sandbox/network/toolchain sections.
-* Add optional post-report QA section.
-* Add graph timeline.
-* Keep current visual quality.
-
-Acceptance:
-
-* Report remains at least as useful as current MCD report and adds no noisy
-  agent meta-commentary.
-
-### Milestone 11: Optional Post-Report QA
-
-* Implement `PostReportQA`.
-* Cluster suppressed, refuted, and deescalated findings.
-* Generate rule-tuning suggestions with false-negative risk.
-* Persist `qa_suggestions`.
-* Render `reports/qa.json` and `reports/qa.md`.
-
-Acceptance:
-
-* QA never changes findings, dispositions, scanner rules, or taxonomy files.
-* QA suggestions reference concrete finding ids and rule/taxonomy refs.
-* Repeated suppressions produce a tuning candidate; one-off suppressions do not
-  create noisy recommendations by default.
-
 ## Testing Strategy
 
 Unit tests:
@@ -2480,68 +2306,6 @@ postReportQa:
   minClusterSize: 2
   includeOneOffs: false
 ```
-
-## Open Questions
-
-1. Does OpenShell have a stable public API and install story suitable for a first
-   implementation? If not, keep it behind the provider interface and ship Monty
-   plus local/container providers first.
-2. Should the first package live inside `stonefish-labs` or a Python-first repo?
-3. Should managed tool installs be implemented before or after decompiler support?
-4. Which Java decompiler should be the default fallback behind JADX?
-5. Should registry metadata be `registry` mode or part of `fetch-only` mode?
-6. How much of the existing Python `parallax-goalpacks` scanner should be
-   imported directly versus copied into a new package?
-7. Should the TS scanner port remain a separate product path, or eventually feed
-   the same ledger schema?
-8. Should the vendored taxonomy live inside the Python package, the existing
-   `@stonefish-labs/rules` package, or both with a shared manifest generator?
-9. Should reports embed excerpts from taxonomy docs, or only references and
-   short generated summaries?
-10. What retention policy should `mcd clean` encourage for large binary analysis
-    outputs and fetched artifacts?
-11. Should project hashes include Git remote URL by default, given that it helps
-    grouping but may expose repository identity in local indexes?
-12. Should post-report QA suggestions be exported as patch-ready taxonomy/rule
-    change proposals, or remain report-only until the maintenance workflow is
-    clearer?
-13. What default tree depth gives agents enough context without bloating every
-    prompt or report?
-
-## Recommended First Build Cut
-
-Build the smallest version that proves the architecture:
-
-```text
-Python package
-vendored Parallax taxonomy manifest
-project/run storage layout
-SQLite ledger
-Pydantic Graph
-current MCD scanner/report reused
-static source scan
-bounded tree view
-no network
-no decompilers
-report rendered from ledger state
-```
-
-Then add:
-
-```text
-taxonomy-driven verification and response rendering
-Monty reviewer batching
-post-report rule QA
-fetch-only network
-tool doctor
-container expansion
-decompilers
-OpenShell provider
-MCP surface
-```
-
-This keeps the valuable report intact while replacing the fragile loop shape
-with explicit, resumable execution.
 
 ## External References
 
