@@ -77,6 +77,30 @@ def test_confirm_fetch_yields_needs_input(tmp_path, monkeypatch):
     assert "BP-EXFIL" not in comps
 
 
+def test_needs_input_report_json_digest_matches_disk(tmp_path, monkeypatch):
+    """The `reports` row's recorded sha256 must match report.json on disk even for a
+    needs_input run — the pending-questions block is folded in BEFORE the file is hashed,
+    not appended after (else every audited needs_input report has a stale digest)."""
+    import unmask.net as netpkg
+    monkeypatch.setattr(netpkg, "fetch", _fake_fetch)
+    result = run_mcd(str(_pkg(tmp_path)),
+                     MCDConfig(storage_root=str(tmp_path / ".mcd"), network="fetch-only", confirm_fetch=True))
+    assert result.status == "needs_input"
+    report_path = Path(result.report_paths["json"])
+    assert "questions" in json.loads(report_path.read_text())  # the block that used to land post-hash
+    on_disk = hashlib.sha256(report_path.read_bytes()).hexdigest()
+
+    from muster.paths import resolve_run_dir
+    from unmask.ledger import LedgerStore
+    led = LedgerStore(str(resolve_run_dir(result.run_dir).db_path))
+    try:
+        row = led.conn.execute(
+            "select sha256 from reports where run_id=? and format='json'", (result.run_id,)).fetchone()
+    finally:
+        led.close()
+    assert row is not None and row["sha256"] == on_disk
+
+
 def test_answer_yes_resume_fetches(tmp_path, monkeypatch):
     import unmask.net as netpkg
     monkeypatch.setattr(netpkg, "fetch", _fake_fetch)

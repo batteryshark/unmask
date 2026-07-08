@@ -504,19 +504,25 @@ class ReviewFindings(BaseNode[MCDGraphState, MCDGraphDeps, dict]):
         # uphold a refute/suppress/deescalate or the finding is kept (needs_human), never
         # silently cleared. This is where recall would otherwise rest on one model call.
         if d.config.verify:
-            from unmask.reviewers import adjudicate, verify_downgrades
-            reviews, verifications = await asyncio.to_thread(
-                partial(verify_downgrades, reviews, assessment, model=d.model_for("verifier")))
-            if verifications:
-                overlay = adjudicate(assessment, reviews)  # re-adjudicate over adjusted reviews
-                d.scratch["verifications"] = {
-                    "checked": len(verifications),
-                    "overturned": sum(1 for v in verifications if v["outcome"] == "overturned"),
-                    "records": verifications,
-                }
-                d.ledger.event(s.run_id, "VerifyDowngrades", "note",
-                               {"checked": len(verifications),
-                                "overturned": sum(1 for v in verifications if v["outcome"] == "overturned")})
+            try:
+                from unmask.reviewers import adjudicate, verify_downgrades
+                verifier_model = d.model_for("verifier")
+            except Exception as exc:  # a bad/missing verifier model degrades to a note, never a hard stop
+                d.ledger.event(s.run_id, "VerifyDowngrades", "note", {"skipped": repr(exc)})
+                verifier_model = None
+            if verifier_model is not None:
+                reviews, verifications = await asyncio.to_thread(
+                    partial(verify_downgrades, reviews, assessment, model=verifier_model))
+                if verifications:
+                    overlay = adjudicate(assessment, reviews)  # re-adjudicate over adjusted reviews
+                    d.scratch["verifications"] = {
+                        "checked": len(verifications),
+                        "overturned": sum(1 for v in verifications if v["outcome"] == "overturned"),
+                        "records": verifications,
+                    }
+                    d.ledger.event(s.run_id, "VerifyDowngrades", "note",
+                                   {"checked": len(verifications),
+                                    "overturned": sum(1 for v in verifications if v["outcome"] == "overturned")})
 
         d.scratch["reviews"] = reviews  # for post-report rule-tuning QA
         model_name = getattr(d.config, "model", None) or type(model).__name__
@@ -640,6 +646,13 @@ class RenderReport(BaseNode[MCDGraphState, MCDGraphDeps, dict]):
                           f"# MCD report — scanner unavailable\n\n{d.scratch.get('scanner_error')}\n"
                           + markdown_coverage_appendix(sections, blocked_binaries))
 
+        # A run with unanswered questions is not done — it's resumable once an orchestrator
+        # answers. Fold the pending questions into report.json BEFORE it is written and
+        # hashed, so the `reports` row's sha256 matches the file on disk.
+        pending_qs = d.ledger.pending_questions(s.run_id)
+        if pending_qs:
+            report_json["questions"] = {"pending": pending_qs}
+
         _atomic_write(reports_dir / "report.json", json.dumps(report_json, indent=2))
         for fmt, fname in (("html", "report.html"), ("md", "report.md"), ("json", "report.json")):
             fp = reports_dir / fname
@@ -651,12 +664,6 @@ class RenderReport(BaseNode[MCDGraphState, MCDGraphDeps, dict]):
         if scan is not None and d.config.post_report_qa != "off" and d.scratch.get("reviews"):
             await _post_report_qa(ctx, scan.assessment, d.scratch["reviews"], reports_dir)
 
-        # A run with unanswered questions is not done — it's resumable once an
-        # orchestrator answers. The report still renders with what we have.
-        pending_qs = d.ledger.pending_questions(s.run_id)
-        if pending_qs:
-            report_json["questions"] = {"pending": pending_qs}
-            _atomic_write(reports_dir / "report.json", json.dumps(report_json, indent=2))
         status = "needs_input" if pending_qs else ("completed" if scan is not None else "partial")
         summary = {"disposition": disposition, "findingCount": finding_count,
                    "blockedBinaries": blocked_binaries, "pendingQuestions": len(pending_qs)}
@@ -729,7 +736,7 @@ def _handle_lead(ctx: _Ctx, item: dict) -> None:
 _DISPATCHER = WorkDispatcher({
     "scan-binary": _handle_scan_binary,
     "lead": _handle_lead,
-})
+}, node_label="ProcessWorkQueue")
 
 
 # --- helpers ---------------------------------------------------------------

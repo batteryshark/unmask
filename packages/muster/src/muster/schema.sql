@@ -2,9 +2,9 @@
 --
 -- This is the durable source of truth for coverage and resumability. The phase
 -- graph reads ledger state to decide what runs next and when a run may finish;
--- the model never decides completion. A consumer registers its DOMAIN tables
--- (observations, findings, ...) via Ledger(extra_schema=...); muster never knows
--- about them. See docs/investigation-engine-seam.md.
+-- the model never decides completion. A consumer registers its own DOMAIN tables
+-- (whatever a "fact" or "finding" is for that domain) via Ledger(extra_schema=...);
+-- muster never knows about them. See docs/investigation-engine-seam.md.
 
 pragma journal_mode = wal;
 pragma synchronous = normal;
@@ -36,7 +36,7 @@ create table if not exists runs (
 create table if not exists artifacts (
     id                 text primary key,
     run_id             text not null,
-    kind               text not null,             -- source-file|manifest|target-tree|archive|native-binary|dotnet-assembly|jar|apk|dex|script|report|...
+    kind               text not null,             -- consumer-defined artifact kind (e.g. source-file|archive|report|...)
     path               text not null,
     logical_path       text not null,
     parent_artifact_id text,
@@ -44,7 +44,7 @@ create table if not exists artifacts (
     size_bytes         integer,
     media_type         text,
     language           text,
-    origin             text not null,             -- inventory|expand|decompile|fetch|report
+    origin             text not null,             -- consumer-defined provenance (e.g. inventory|fetch|report)
     metadata_json      text not null default '{}',
     created_at         text not null
 );
@@ -55,7 +55,7 @@ create table if not exists work_items (
     run_id         text not null,
     stable_key     text not null,
     target         text not null,
-    operation      text not null,                 -- inventory|scan-source|scan-binary|decompile|compose-mcd|render-report|...
+    operation      text not null,                 -- consumer-defined unit of work (e.g. inventory|render-report|...)
     category       text not null,
     title          text not null,
     status         text not null,                 -- queued|leased|done|failed|needs_review|needs_evidence|deferred|blocked

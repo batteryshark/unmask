@@ -21,7 +21,7 @@ from muster.graph import (
     atomic_write,
     enter,
 )
-from muster.ledger import Ledger, SCHEMA_VERSION, new_id, stable_key
+from muster.ledger import Ledger, SCHEMA_VERSION, new_id, stable_key, utcnow
 from muster.paths import (
     RunPaths,
     compute_project_id,
@@ -31,7 +31,7 @@ from muster.paths import (
 )
 
 __all__ = [
-    "Ledger", "SCHEMA_VERSION", "new_id", "stable_key",
+    "Ledger", "SCHEMA_VERSION", "new_id", "stable_key", "utcnow",
     "GraphState", "GraphDeps", "WorkDispatcher", "atomic_write", "enter", "ask",
     "RunPaths", "compute_project_id", "compute_run_id", "new_run_paths", "resolve_run_dir",
 ]

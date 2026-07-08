@@ -18,9 +18,10 @@ from pathlib import Path
 # Re-exported so existing call sites (nodes.py `from unmask.ledger.store import
 # stable_key`, ledger/__init__ `SCHEMA_VERSION, new_id`) keep working after the
 # spine moved to muster.
-from muster.ledger import SCHEMA_VERSION, Ledger, _now, new_id, stable_key  # noqa: F401
+from muster.ledger import SCHEMA_VERSION, Ledger, new_id, stable_key, utcnow  # noqa: F401
 
 _DOMAIN_SCHEMA_PATH = Path(__file__).with_name("schema.sql")
+_DOMAIN_SCHEMA = _DOMAIN_SCHEMA_PATH.read_text(encoding="utf-8")  # read once at import
 # Domain derived tables muster's reset_run_derived wipes on resume, on top of the
 # spine's own (artifacts, work_items, graph_events, reports, questions).
 _DOMAIN_RESET_TABLES = ("observations", "findings", "judgments", "qa_suggestions")
@@ -30,7 +31,7 @@ class LedgerStore(Ledger):
     def __init__(self, db_path: str | Path):
         super().__init__(
             db_path,
-            extra_schema=_DOMAIN_SCHEMA_PATH.read_text(encoding="utf-8"),
+            extra_schema=_DOMAIN_SCHEMA,
             reset_tables=_DOMAIN_RESET_TABLES,
         )
 
@@ -46,7 +47,7 @@ class LedgerStore(Ledger):
                values (?,?,?,?,?,?,?,?,?,?,?)""",
             (oid, run_id, artifact_id, atom, confidence, method, rule_id,
              json.dumps(location or {}), json.dumps(evidence or {}),
-             json.dumps(relationships or []), _now()),
+             json.dumps(relationships or []), utcnow()),
         )
         self.conn.commit()
         return oid
@@ -66,7 +67,7 @@ class LedgerStore(Ledger):
              confidence_label, json.dumps(evidence or []), json.dumps(disproof or []),
              json.dumps(verification or []), json.dumps(response or {}),
              json.dumps(amplifiers) if amplifiers is not None else None,
-             json.dumps(attenuators) if attenuators is not None else None, _now()),
+             json.dumps(attenuators) if attenuators is not None else None, utcnow()),
         )
         self.conn.commit()
         return fid
@@ -78,10 +79,10 @@ class LedgerStore(Ledger):
     def reset_observations(self, run_id: str) -> None:
         """Drop this run's observations so the post-transform union can be re-recorded
         without stale rows (finding/observation ids are renumbered over the union)."""
-        self._delete_run_rows(run_id, "observations")
+        self.delete_run_rows(run_id, "observations")
 
     def reset_findings(self, run_id: str) -> None:
-        self._delete_run_rows(run_id, "findings")
+        self.delete_run_rows(run_id, "findings")
 
     # --- judgments (agentic review) --------------------------------------
     def record_judgment(self, run_id: str, review, *, reviewer="agentic", model=None) -> str:
@@ -95,7 +96,7 @@ class LedgerStore(Ledger):
             (jid, run_id, review.finding_id, reviewer, model, review.verdict,
              review.reviewed_confidence, review.response_tier,
              1 if review.excluded_from_disposition else 0, review.justification,
-             json.dumps([f.model_dump() for f in review.followups]), _now()),
+             json.dumps([f.model_dump() for f in review.followups]), utcnow()),
         )
         self.conn.commit()
         return jid
@@ -114,7 +115,7 @@ class LedgerStore(Ledger):
                values (?,?,?,?,?,?,?,?,?,?)""",
             (qid, run_id, suggestion.kind, json.dumps(suggestion.finding_ids),
              json.dumps(suggestion.rule_ids), suggestion.suggestion, suggestion.rationale,
-             suggestion.risk, suggestion.estimated_noise_reduction, _now()),
+             suggestion.risk, suggestion.estimated_noise_reduction, utcnow()),
         )
         self.conn.commit()
         return qid

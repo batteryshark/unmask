@@ -30,6 +30,9 @@ from pathlib import Path
 
 SCHEMA_VERSION = "0.1.0"
 _CORE_SCHEMA_PATH = Path(__file__).with_name("schema.sql")
+# Read once at import: the spine schema is a small data file, but a Ledger is constructed
+# per run (and once per run by a project-wide rollup), so don't re-read it on every open.
+_CORE_SCHEMA = _CORE_SCHEMA_PATH.read_text(encoding="utf-8")
 
 # Spine tables a re-drive regenerates. Domain derived tables are appended by the
 # consumer via reset_tables; the run row itself is always kept, and answers survive
@@ -37,7 +40,10 @@ _CORE_SCHEMA_PATH = Path(__file__).with_name("schema.sql")
 _CORE_RESET_TABLES = ("artifacts", "work_items", "graph_events", "reports", "questions")
 
 
-def _now() -> str:
+def utcnow() -> str:
+    """UTC timestamp in ISO-8601 — the ledger's created_at/updated_at format. Public so a
+    consumer's LedgerStore subclass can timestamp its domain rows consistently with the
+    spine (part of the subclassing contract, not a private reach-in)."""
     return datetime.now(timezone.utc).isoformat()
 
 
@@ -63,7 +69,7 @@ class Ledger:
         self._init_schema()
 
     def _init_schema(self) -> None:
-        self.conn.executescript(_CORE_SCHEMA_PATH.read_text(encoding="utf-8"))
+        self.conn.executescript(_CORE_SCHEMA)
         if self._extra_schema:
             self.conn.executescript(self._extra_schema)
         self.conn.execute(
@@ -84,7 +90,7 @@ class Ledger:
     # --- runs -------------------------------------------------------------
     def create_run(self, *, run_id, project_id, target_path, target_root,
                    storage_root, run_dir, config_json) -> None:
-        now = _now()
+        now = utcnow()
         self.conn.execute(
             """insert or replace into runs
                (id, project_id, target_path, target_root, storage_root, run_dir,
@@ -97,7 +103,7 @@ class Ledger:
 
     def finish_run(self, run_id: str, status: str, *, coverage: dict | None = None,
                    summary: dict | None = None, error: str | None = None) -> None:
-        now = _now()
+        now = utcnow()
         self.conn.execute(
             """update runs set status=?, updated_at=?, completed_at=?,
                               coverage_json=?, summary_json=?, error=? where id=?""",
@@ -123,7 +129,7 @@ class Ledger:
                 media_type, language, origin, metadata_json, created_at)
                values (?,?,?,?,?,?,?,?,?,?,?,?)""",
             (aid, run_id, kind, str(path), logical_path, sha256, size_bytes,
-             media_type, language, origin, json.dumps(metadata or {}), _now()),
+             media_type, language, origin, json.dumps(metadata or {}), utcnow()),
         )
         self.conn.commit()
         return aid
@@ -139,7 +145,7 @@ class Ledger:
     # --- work items -------------------------------------------------------
     def enqueue(self, *, run_id, key, target, operation, category, title,
                 priority=100, depends_on=None, payload=None) -> str:
-        now = _now()
+        now = utcnow()
         wid = new_id("wi")
         cur = self.conn.execute(
             """insert or ignore into work_items
@@ -159,7 +165,7 @@ class Ledger:
 
     def set_work_status(self, wid: str, status: str, *, result: dict | None = None,
                         error: str | None = None) -> None:
-        now = _now()
+        now = utcnow()
         terminal = status in {"done", "failed", "needs_review", "deferred", "blocked"}
         self.conn.execute(
             """update work_items set status=?, updated_at=?, terminal_at=?,
@@ -205,16 +211,24 @@ class Ledger:
             "order by priority desc, created_at asc limit 1", (run_id,)).fetchone()
         if row is None:
             return None
+        ts = utcnow()
         self.conn.execute("update work_items set status='leased', updated_at=? where id=?",
-                          (_now(), row["id"]))
+                          (ts, row["id"]))
         self.conn.commit()
-        # Return the post-lease row so the caller sees status='leased' (matches the
-        # docstring), not the pre-update snapshot.
-        return self.conn.execute("select * from work_items where id=?", (row["id"],)).fetchone()
+        # Return the post-lease view (status='leased') so the caller sees the state it just
+        # claimed — built in memory from the row already fetched, no second query. Nothing
+        # reads the pre-lease snapshot; the sole caller re-wraps this in a dict.
+        leased = dict(row)
+        leased["status"] = "leased"
+        leased["updated_at"] = ts
+        return leased
 
     # --- resume (derived-state reset) ------------------------------------
-    def _delete_run_rows(self, run_id: str, *tables: str) -> None:
-        for table in tables:  # table names are internal constants, never user input
+    def delete_run_rows(self, run_id: str, *tables: str) -> None:
+        """Delete this run's rows from the named tables. Public so a consumer subclass can
+        do targeted domain resets (e.g. re-record observations over a recomposed union).
+        Table names are internal constants, never user input."""
+        for table in tables:
             self.conn.execute(f"delete from {table} where run_id=?", (run_id,))
         self.conn.commit()
 
@@ -224,7 +238,7 @@ class Ledger:
         worth reusing (fetched bytes, decompiled trees, injected ANSWERS) lives on disk
         or in the answers table, not in these. Wipes the spine's derived tables plus
         the consumer's registered domain tables."""
-        self._delete_run_rows(run_id, *_CORE_RESET_TABLES, *self._domain_reset_tables)
+        self.delete_run_rows(run_id, *_CORE_RESET_TABLES, *self._domain_reset_tables)
 
     # --- questions / answers (durable human-in-the-loop) -----------------
     def ask_question(self, run_id: str, *, qid: str, node: str, kind: str, prompt: str,
@@ -233,7 +247,7 @@ class Ledger:
         self.conn.execute(
             "insert or ignore into questions (id, run_id, node, kind, prompt, options_json, created_at) "
             "values (?,?,?,?,?,?,?)",
-            (qid, run_id, node, kind, prompt, json.dumps(options or []), _now()))
+            (qid, run_id, node, kind, prompt, json.dumps(options or []), utcnow()))
         self.conn.commit()
         return qid
 
@@ -241,7 +255,7 @@ class Ledger:
         """Persist an answer (survives resume's reset so the re-asked question finds it)."""
         self.conn.execute(
             "insert or replace into answers (id, run_id, answer, answered_at) values (?,?,?,?)",
-            (qid, run_id, str(answer), _now()))
+            (qid, run_id, str(answer), utcnow()))
         self.conn.commit()
 
     def get_answer(self, run_id: str, qid: str) -> str | None:
@@ -268,7 +282,7 @@ class Ledger:
         self.conn.execute(
             """insert into graph_events (id, run_id, node, event, payload_json, created_at)
                values (?,?,?,?,?,?)""",
-            (new_id("evt"), run_id, node, event, json.dumps(payload or {}), _now()),
+            (new_id("evt"), run_id, node, event, json.dumps(payload or {}), utcnow()),
         )
         self.conn.commit()
 
@@ -278,7 +292,7 @@ class Ledger:
         self.conn.execute(
             """insert into reports (id, run_id, format, path, sha256, created_at)
                values (?,?,?,?,?,?)""",
-            (new_id("rep"), run_id, fmt, str(path), digest, _now()),
+            (new_id("rep"), run_id, fmt, str(path), digest, utcnow()),
         )
         self.conn.commit()
 

@@ -85,6 +85,19 @@ def test_dispatcher_handler_exception_fails_item_not_loop(ctx):
     assert ctx.deps.ledger.count_work_items("r1", operation="boom", status="failed") == 1
 
 
+def test_dispatcher_node_label_attributes_the_error_event(ctx):
+    """A consumer passes its drain-node name so a handler failure is attributed to the node
+    that actually ran, not a hardcoded consumer name leaked into generic muster."""
+    def boom(c, item):
+        raise RuntimeError("x")
+    ctx.deps.ledger.enqueue(run_id="r1", key=stable_key("z"), target="z",
+                            operation="boom", category="c", title="t")
+    WorkDispatcher({"boom": boom}, node_label="MyDrainNode").run_one(ctx)
+    ev = ctx.deps.ledger.conn.execute(
+        "select node from graph_events where run_id='r1' and event='error'").fetchone()
+    assert ev["node"] == "MyDrainNode"
+
+
 def test_bases_are_kw_only_so_a_subclass_can_add_required_fields(tmp_path):
     """GraphState/GraphDeps are kw_only, so a consumer subclass can add a REQUIRED field
     without the 'non-default argument follows default argument' dataclass trap."""

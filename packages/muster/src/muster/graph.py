@@ -99,8 +99,13 @@ class WorkDispatcher:
     that raises fails its item rather than the run. New operations plug in as handlers
     without touching the graph."""
 
-    def __init__(self, handlers: dict[str, WorkHandler] | None = None):
+    def __init__(self, handlers: dict[str, WorkHandler] | None = None, *,
+                 node_label: str = "WorkDispatcher"):
         self._handlers: dict[str, WorkHandler] = dict(handlers or {})
+        # graph_events node name used when a handler raises. Defaults to a domain-neutral
+        # label; a consumer passes its own drain-node name so the trace attributes the
+        # failure to the node that was actually running (not a hardcoded consumer name).
+        self._node_label = node_label
 
     def register(self, operation: str, handler: WorkHandler) -> "WorkDispatcher":
         self._handlers[operation] = handler
@@ -118,7 +123,7 @@ class WorkDispatcher:
                     result={"note": f"No queue handler for operation {op!r}."})
         except Exception as exc:  # a handler bug must not stall the loop
             ctx.deps.ledger.set_work_status(item["id"], "failed", error=f"{type(exc).__name__}: {exc}")
-            ctx.deps.ledger.event(ctx.state.run_id, "ProcessWorkQueue", "error",
+            ctx.deps.ledger.event(ctx.state.run_id, self._node_label, "error",
                                   {"operation": op, "error": repr(exc)})
 
     def run_one(self, ctx) -> dict | None:
