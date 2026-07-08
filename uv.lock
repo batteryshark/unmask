@@ -10,6 +10,7 @@ resolution-markers = [
 
 [manifest]
 members = [
+    "lucent",
     "mcd-workspace",
     "muster",
     "unmask",
@@ -898,6 +899,25 @@ wheels = [
 ]
 
 [[package]]
+name = "lucent"
+version = "0.0.1"
+source = { editable = "packages/lucent" }
+dependencies = [
+    { name = "muster" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "pytest" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "muster", editable = "packages/muster" }]
+
+[package.metadata.requires-dev]
+dev = [{ name = "pytest", specifier = ">=8" }]
+
+[[package]]
 name = "markdown-it-py"
 version = "4.2.0"
 source = { registry = "https://pypi.org/simple" }
@@ -984,12 +1004,20 @@ model = [
     { name = "pydantic-ai" },
 ]
 
+[package.dev-dependencies]
+dev = [
+    { name = "pytest" },
+]
+
 [package.metadata]
 requires-dist = [
     { name = "pydantic-ai", marker = "extra == 'model'", specifier = ">=0.0.1" },
     { name = "pydantic-graph", specifier = ">=0.0.1" },
 ]
 provides-extras = ["model"]
+
+[package.metadata.requires-dev]
+dev = [{ name = "pytest", specifier = ">=8" }]
 
 [[package]]
 name = "openai"

@@ -12,6 +12,7 @@ members = ["packages/*"]
 
 [tool.uv.sources]
 muster = { workspace = true }
+lucent = { workspace = true }
 unmask = { workspace = true }
 unmask-re = { workspace = true }
 
@@ -32,5 +33,5 @@ dev = ["pytest>=8"]
 # test files and vendored deps, so `packages` stays in norecursedirs; an explicit
 # testpath into packages/muster/tests is still collected (norecursedirs only blocks
 # recursion, not the initial paths).
-testpaths = ["tests", "packages/muster/tests"]
+testpaths = ["tests", "packages/muster/tests", "packages/lucent/tests"]
 norecursedirs = ["packages", ".venv", "reference", "_vendor"]
