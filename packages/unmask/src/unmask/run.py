@@ -75,10 +75,11 @@ def run_mcd(target: str, config: MCDConfig | None = None, *, review_model=None) 
     return _drive(paths, config, target_path, ledger, review_model=review_model)
 
 
-def resume_mcd(run_dir: str, *, review_model=None) -> RunResult:
+def resume_mcd(run_dir: str, *, review_model=None, answers: dict | None = None) -> RunResult:
     """Re-drive an existing run from its ledger — reconstructing the original config and
     target from the DB, clearing the derived tables for a clean re-record, and reusing
-    the run dir's on-disk caches (fetched bytes) so external work isn't redone."""
+    the run dir's on-disk caches (fetched bytes) so external work isn't redone. ``answers``
+    (question id → answer) resolves questions a `needs_input` run left pending."""
     paths = resolve_run_dir(run_dir)
     ledger = LedgerStore(paths.db_path)
     row = ledger.get_run(paths.run_id)
@@ -98,14 +99,31 @@ def resume_mcd(run_dir: str, *, review_model=None) -> RunResult:
         ledger.close()
         raise FileNotFoundError(f"target no longer exists: {target_path}")
 
+    # Inject answers to pending questions BEFORE reset — the answers table survives the
+    # reset, so a re-asked question finds its answer and the asking node proceeds.
+    for qid, answer in (answers or {}).items():
+        ledger.record_answer(paths.run_id, qid, answer)
+
     ledger.reset_run_derived(paths.run_id)
     ledger.create_run(  # reset status to running, preserving identity + config
         run_id=paths.run_id, project_id=paths.project_id, target_path=target_path,
         target_root=Path(row["target_root"]), storage_root=Path(row["storage_root"]),
         run_dir=paths.run_dir, config_json=row["config_json"],
     )
-    ledger.event(paths.run_id, "ResumeRun", "note", {"resumedFrom": prior_status})
+    ledger.event(paths.run_id, "ResumeRun", "note",
+                 {"resumedFrom": prior_status, "answers": len(answers or {})})
     return _drive(paths, config, target_path, ledger, review_model=review_model, resume=True)
+
+
+def pending_questions_of(run_dir: str) -> list[dict]:
+    """The questions a `needs_input` run left pending — what an orchestrator answers,
+    then passes back to `resume_mcd(answers=...)`."""
+    paths = resolve_run_dir(run_dir)
+    ledger = LedgerStore(paths.db_path)
+    try:
+        return ledger.pending_questions(paths.run_id)
+    finally:
+        ledger.close()
 
 
 def status_of(run_dir: str) -> dict:

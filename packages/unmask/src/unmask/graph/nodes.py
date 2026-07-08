@@ -56,6 +56,21 @@ def _enter(ctx: _Ctx, name: str) -> None:
     ctx.deps.ledger.event(ctx.state.run_id, name, "enter")
 
 
+def _ask(ctx: _Ctx, *, node: str, kind: str, prompt: str, options=None) -> str | None:
+    """Ask a DURABLE question — never a blocking wait. Returns the answer if one was
+    injected (a prior resume), else records the question as pending and returns None; the
+    caller handles None by deferring that path. The run finishes `needs_input` while any
+    question is unanswered, and an orchestrator answers + resumes. Idempotent: the id is
+    content-addressed, so the same question maps to the same answer across re-drives."""
+    qid = stable_key(prompt, kind, node)
+    answer = ctx.deps.ledger.get_answer(ctx.state.run_id, qid)
+    if answer is not None:
+        return answer
+    ctx.deps.ledger.ask_question(ctx.state.run_id, qid=qid, node=node, kind=kind,
+                                 prompt=prompt, options=options)
+    return None
+
+
 @dataclass
 class InitializeRun(BaseNode[MCDGraphState, MCDGraphDeps, dict]):
     async def run(self, ctx: _Ctx) -> "InventoryTarget":
@@ -201,6 +216,21 @@ class FetchReferences(BaseNode[MCDGraphState, MCDGraphDeps, dict]):
                 run_id=s.run_id, key=stable_key(t.url, "fetch"), target=t.url,
                 operation="fetch", category="network",
                 title=f"Fetch referenced URL {t.url}", payload={"sourceRel": t.source_rel})
+            if d.config.confirm_fetch:  # durable consent — gate the outbound request
+                answer = _ask(ctx, node="FetchReferences", kind="fetch-consent",
+                              prompt=f"Fetch remote content from {t.url}? (referenced by "
+                                     f"{t.source_rel}; outbound request to attacker-controlled infra)",
+                              options=["yes", "no"])
+                if answer is None:  # unanswered → leave pending, run finishes needs_input
+                    d.ledger.set_work_status(wid, "needs_review", result={"note": "awaiting fetch consent"})
+                    summaries.append({"url": t.url, "sourceRel": t.source_rel, "ok": False,
+                                      "pending": True, "note": "awaiting fetch consent"})
+                    continue
+                if answer.strip().lower() not in ("yes", "y", "true"):
+                    d.ledger.set_work_status(wid, "done", result={"note": "fetch declined by consent"})
+                    summaries.append({"url": t.url, "sourceRel": t.source_rel, "ok": False,
+                                      "declined": True, "note": "fetch declined"})
+                    continue
             cached = manifest.get(t.url)
             reused = bool(cached and cached.get("path") and Path(cached["path"]).exists())
             if reused:
@@ -640,9 +670,15 @@ class RenderReport(BaseNode[MCDGraphState, MCDGraphDeps, dict]):
         if scan is not None and d.config.post_report_qa != "off" and d.scratch.get("reviews"):
             await _post_report_qa(ctx, scan.assessment, d.scratch["reviews"], reports_dir)
 
-        status = "completed" if scan is not None else "partial"
+        # A run with unanswered questions is not done — it's resumable once an
+        # orchestrator answers. The report still renders with what we have.
+        pending_qs = d.ledger.pending_questions(s.run_id)
+        if pending_qs:
+            report_json["questions"] = {"pending": pending_qs}
+            _atomic_write(reports_dir / "report.json", json.dumps(report_json, indent=2))
+        status = "needs_input" if pending_qs else ("completed" if scan is not None else "partial")
         summary = {"disposition": disposition, "findingCount": finding_count,
-                   "blockedBinaries": blocked_binaries}
+                   "blockedBinaries": blocked_binaries, "pendingQuestions": len(pending_qs)}
         d.ledger.finish_run(s.run_id, status, coverage=coverage, summary=summary)
         _write_run_json(ctx, status=status, disposition=disposition)
         d.ledger.event(s.run_id, "RenderReport", "note", summary)

@@ -35,8 +35,12 @@ of what was done and why.
   `ProcessWorkQueue` drain loop + the `_WORK_HANDLERS` registry, `_atomic_write`.
 - **Storage/paths**: run/project identity, content-addressed IDs, the run-dir layout,
   the resume driver (`reset_run_derived` + re-drive).
-- **Patterns**: the *lead* work-item lifecycle (propose → enqueue → drain → fold) and the
-  *adversarial-verify* pass (N perspective-diverse skeptics vote on a borderline call).
+- **Patterns**: the *lead* work-item lifecycle (propose → enqueue → drain → fold), the
+  *adversarial-verify* pass (N perspective-diverse skeptics vote on a borderline call),
+  and *durable questions* — a node that can't decide records a `needs_input` question,
+  keeps draining, and the run finishes `needs_input`; the orchestrator answers and
+  resumes (answers survive the reset), so the asking node reads its answer and proceeds.
+  Never a blocking wait — human-in-the-loop that preserves durability.
 
 ## The four extension hooks (a consumer registers these; nothing else)
 

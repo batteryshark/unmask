@@ -53,6 +53,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
         review=args.review or args.post_report_qa != "off",  # QA needs review judgments
         verify=getattr(args, "verify", False),
         leads=getattr(args, "leads", False),
+        confirm_fetch=getattr(args, "confirm_fetch", False),
         post_report_qa=args.post_report_qa,
         model=getattr(args, "model", None),
         models=_parse_models(getattr(args, "models", None)),
@@ -119,7 +120,12 @@ def _cmd_tools(args: argparse.Namespace) -> int:
 def _cmd_resume(args: argparse.Namespace) -> int:
     from unmask.run import resume_mcd
 
-    result = resume_mcd(args.run_dir)
+    answers = {}
+    for pair in (args.answer or []):
+        qid, sep, val = pair.partition("=")
+        if sep:
+            answers[qid.strip()] = val.strip()
+    result = resume_mcd(args.run_dir, answers=answers or None)
     if args.json:
         print(json.dumps(result.__dict__, indent=2))
         return 0
@@ -129,6 +135,23 @@ def _cmd_resume(args: argparse.Namespace) -> int:
     print(f"Disposition:{result.disposition!s:>12}   ({result.finding_count} finding(s))")
     print(f"Report:     {result.report_paths['html']}")
     return 0 if result.status == "completed" else 1
+
+
+def _cmd_questions(args: argparse.Namespace) -> int:
+    from unmask.run import pending_questions_of
+
+    pending = pending_questions_of(args.run_dir)
+    if args.json:
+        print(json.dumps(pending, indent=2))
+        return 0
+    if not pending:
+        print("(no pending questions)")
+        return 0
+    for q in pending:
+        opts = f"  [{'/'.join(q['options'])}]" if q.get("options") else ""
+        print(f"{q['id']}  ({q['kind']}){opts}\n  {q['prompt']}")
+    print(f"\nAnswer with: unmask resume --run-dir {args.run_dir} --answer <id>=<value>")
+    return 0
 
 
 def _cmd_mcp(args: argparse.Namespace) -> int:
@@ -203,6 +226,9 @@ def build_parser() -> argparse.ArgumentParser:
                           "proposer=lmstudio:m3,verifier=zai:glm (roles: reviewer/verifier/proposer/qa)")
     run.add_argument("--post-report-qa", default="off", choices=["off", "rules"],
                      help="advisory rule-tuning feedback over reviewed findings (implies --review)")
+    run.add_argument("--confirm-fetch", action="store_true",
+                     help="gate each remote fetch on a durable question; the run finishes "
+                          "needs_input, answer via `unmask questions` + `resume --answer`")
     run.add_argument("--json", action="store_true")
     run.set_defaults(func=_cmd_run)
 
@@ -220,10 +246,17 @@ def build_parser() -> argparse.ArgumentParser:
     tools.set_defaults(func=_cmd_tools)
 
     res = sub.add_parser("resume", help="re-drive an existing run from its ledger, "
-                                        "reusing fetched content")
+                                        "reusing fetched content; --answer resolves questions")
     res.add_argument("--run-dir", required=True)
+    res.add_argument("--answer", action="append", metavar="ID=VALUE",
+                     help="answer a pending question (repeatable), e.g. --answer <id>=yes")
     res.add_argument("--json", action="store_true")
     res.set_defaults(func=_cmd_resume)
+
+    q = sub.add_parser("questions", help="list a run's pending questions (needs_input)")
+    q.add_argument("--run-dir", required=True)
+    q.add_argument("--json", action="store_true")
+    q.set_defaults(func=_cmd_questions)
 
     mcp = sub.add_parser("mcp", help="run the MCP server (stdio) exposing scan/resume/report")
     mcp.set_defaults(func=_cmd_mcp)

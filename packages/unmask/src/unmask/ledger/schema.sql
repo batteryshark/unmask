@@ -157,3 +157,27 @@ create table if not exists reports (
     sha256     text,
     created_at text not null
 );
+
+-- Durable questions a node could not answer itself. The run finishes `needs_input`
+-- with these pending; the orchestrator answers and resumes. Regenerated per drive
+-- (re-asked when the graph re-runs), so it IS reset on resume.
+create table if not exists questions (
+    id           text primary key,               -- content-addressed (prompt+kind+node)
+    run_id       text not null,
+    node         text not null,
+    kind         text not null,                  -- fetch-consent|lead-decision|...
+    prompt       text not null,
+    options_json text not null default '[]',
+    created_at   text not null
+);
+create index if not exists idx_questions_run on questions(run_id);
+
+-- Answers injected on resume. Keyed by the question's content-addressed id and NOT
+-- reset on re-drive, so a resumed run's re-asked question finds its answer.
+create table if not exists answers (
+    id          text primary key,                -- the question id it answers
+    run_id      text not null,
+    answer      text not null,
+    answered_at text not null
+);
+create index if not exists idx_answers_run on answers(run_id);

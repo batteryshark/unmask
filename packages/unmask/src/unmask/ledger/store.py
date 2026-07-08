@@ -239,10 +239,47 @@ class LedgerStore:
     def reset_run_derived(self, run_id: str) -> None:
         """Clear everything a re-drive regenerates, keeping the run row itself. Resume
         starts from a clean slate so nodes re-record without duplicating; anything
-        worth reusing (fetched bytes, decompiled trees) lives on disk, not in these
-        tables."""
+        worth reusing (fetched bytes, decompiled trees, injected ANSWERS) lives on disk
+        or in the answers table, not in these."""
         self._delete_run_rows(run_id, "artifacts", "observations", "findings", "work_items",
-                              "graph_events", "judgments", "qa_suggestions", "reports")
+                              "graph_events", "judgments", "qa_suggestions", "reports", "questions")
+
+    # --- questions / answers (durable human-in-the-loop) -----------------
+    def ask_question(self, run_id: str, *, qid: str, node: str, kind: str, prompt: str,
+                     options: list | None = None) -> str:
+        """Record a pending question (idempotent by content-addressed id)."""
+        self.conn.execute(
+            "insert or ignore into questions (id, run_id, node, kind, prompt, options_json, created_at) "
+            "values (?,?,?,?,?,?,?)",
+            (qid, run_id, node, kind, prompt, json.dumps(options or []), _now()))
+        self.conn.commit()
+        return qid
+
+    def record_answer(self, run_id: str, qid: str, answer: str) -> None:
+        """Persist an answer (survives resume's reset so the re-asked question finds it)."""
+        self.conn.execute(
+            "insert or replace into answers (id, run_id, answer, answered_at) values (?,?,?,?)",
+            (qid, run_id, str(answer), _now()))
+        self.conn.commit()
+
+    def get_answer(self, run_id: str, qid: str) -> str | None:
+        row = self.conn.execute("select answer from answers where id=?", (qid,)).fetchone()
+        return row["answer"] if row else None
+
+    def pending_questions(self, run_id: str) -> list[dict]:
+        """Questions asked this run that have no answer yet — what the orchestrator must
+        resolve before the run can complete."""
+        rows = self.conn.execute(
+            "select q.id, q.node, q.kind, q.prompt, q.options_json from questions q "
+            "left join answers a on a.id=q.id where q.run_id=? and a.id is null "
+            "order by q.created_at", (run_id,)).fetchall()
+        return [{"id": r["id"], "node": r["node"], "kind": r["kind"], "prompt": r["prompt"],
+                 "options": json.loads(r["options_json"])} for r in rows]
+
+    def count_pending_questions(self, run_id: str) -> int:
+        return self.conn.execute(
+            "select count(*) c from questions q left join answers a on a.id=q.id "
+            "where q.run_id=? and a.id is null", (run_id,)).fetchone()["c"]
 
     # --- judgments (agentic review) --------------------------------------
     def record_judgment(self, run_id: str, review, *, reviewer="agentic", model=None) -> str:

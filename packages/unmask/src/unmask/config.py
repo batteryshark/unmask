@@ -53,6 +53,10 @@ class MCDConfig:
     # (signal the deterministic passes left with no verdict). Off by default; needs a
     # review model. Leads never author verdicts — they steer WHERE, rules judge WHAT.
     leads: bool = False
+    # Human-in-the-loop: gate each remote fetch on a durable question. The first run
+    # records the questions and finishes `needs_input` (no fetch); an orchestrator answers
+    # and resumes. Never a blocking wait.
+    confirm_fetch: bool = False
 
     tree_enabled: bool = True
     tree_max_depth: int = 4

@@ -107,9 +107,14 @@ def scan_target(target: str, *, network: str = "offline", review: bool = False,
     return _result_summary(run_mcd(target, cfg))
 
 
-def resume_run(run_dir: str) -> dict:
+def resume_run(run_dir: str, answers: dict | None = None) -> dict:
     from unmask import resume_mcd
-    return _result_summary(resume_mcd(run_dir))
+    return _result_summary(resume_mcd(run_dir, answers=answers or None))
+
+
+def pending_questions(run_dir: str) -> list:
+    from unmask.run import pending_questions_of
+    return pending_questions_of(run_dir)
 
 
 def read_report(run_dir: str, fmt: str = "md"):
@@ -169,9 +174,16 @@ def build_server():
             partial(scan_target, target, network=network, review=review, storage_root=storage_root))
 
     @server.tool()
-    async def resume(run_dir: str) -> dict:
-        """Re-drive an existing run from its ledger, reusing already-fetched content."""
-        return await asyncio.to_thread(resume_run, run_dir)
+    async def resume(run_dir: str, answers: dict | None = None) -> dict:
+        """Re-drive an existing run from its ledger, reusing already-fetched content.
+        `answers` (question id → value) resolves questions a needs_input run left pending."""
+        return await asyncio.to_thread(partial(resume_run, run_dir, answers))
+
+    @server.tool()
+    def questions(run_dir: str) -> list:
+        """List a run's pending questions (when status is needs_input). Answer them by
+        passing {id: value} to `resume`."""
+        return pending_questions(run_dir)
 
     @server.tool()
     def get_report(run_dir: str, format: str = "md"):
