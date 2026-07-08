@@ -10,7 +10,6 @@ resolution-markers = [
 
 [manifest]
 members = [
-    "lucent",
     "mcd-workspace",
     "unmask",
     "unmask-re",
@@ -896,25 +895,6 @@ sdist = { url = "https://files.pythonhosted.org/packages/03/04/471b916249fe7e220
 wheels = [
     { url = "https://files.pythonhosted.org/packages/10/2f/23e5b8fa22f75f73965c72e5c29e6fb8715263457394601e254fe26fbe31/logfire_api-4.37.0-py3-none-any.whl", hash = "sha256:1d756f8ba23aa56d438e0ba2c0f529a00fcac975b8785c561b058267f9465088", size = 138710, upload-time = "2026-06-12T20:47:05.526Z" },
 ]
-
-[[package]]
-name = "lucent"
-version = "0.0.1"
-source = { editable = "packages/lucent" }
-dependencies = [
-    { name = "muster" },
-]
-
-[package.dev-dependencies]
-dev = [
-    { name = "pytest" },
-]
-
-[package.metadata]
-requires-dist = [{ name = "muster", git = "https://github.com/batteryshark/muster.git?rev=3a14fad5dec9e84483d12ebd4c3a62aecbb0eeb5" }]
-
-[package.metadata.requires-dev]
-dev = [{ name = "pytest", specifier = ">=8" }]
 
 [[package]]
 name = "markdown-it-py"

@@ -11,11 +11,10 @@
 members = ["packages/*"]
 
 [tool.uv.sources]
-# muster graduated to its own private repo (github.com/batteryshark/muster) — consumed
+# muster graduated to its own private repo (github.com/batteryshark/muster), consumed
 # here as a pinned git dependency, not a workspace member. Bump `rev` to adopt a new
 # muster release.
 muster = { git = "https://github.com/batteryshark/muster.git", rev = "3a14fad5dec9e84483d12ebd4c3a62aecbb0eeb5" }
-lucent = { workspace = true }
 unmask = { workspace = true }
 unmask-re = { workspace = true }
 
@@ -30,11 +29,7 @@ dependencies = ["unmask"]
 dev = ["pytest>=8"]
 
 [tool.pytest.ini_options]
-# unmask's suite lives in tests/; muster ships its own standalone spine suite under
-# packages/muster/tests (so it travels to muster's own repo) — collect both. The
-# vendored rekit skills under packages/unmask-re/skills/ carry their own (Python 2-era)
-# test files and vendored deps, so `packages` stays in norecursedirs; an explicit
-# testpath into packages/muster/tests is still collected (norecursedirs only blocks
-# recursion, not the initial paths).
-testpaths = ["tests", "packages/lucent/tests"]
+# The vendored RE skills under packages/unmask-re/skills/ carry their own (Python 2-era)
+# test files and vendored deps, so keep `packages` in norecursedirs.
+testpaths = ["tests"]
 norecursedirs = ["packages", ".venv", "reference", "_vendor"]
