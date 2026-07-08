@@ -20,6 +20,13 @@ def _mcd_strong_agent_steering(o) -> bool:
     return o.atom != "AITM.TOOL" and _strong_agent_steering(o)
 
 
+def _dataflow_proves_dropper(inv, path) -> bool:
+    """True if intra-file taint traced a fetched value into an exec/eval/shell sink
+    in `path` (a `dropper`-kind dataflow path)."""
+    return any(p.get("kind") == "dropper"
+               for p in (getattr(inv, "dataflow", None) or {}).get(path, []))
+
+
 def _attenuate_binary_string_only_findings(findings: list, obs: list) -> list:
     by_id = {o.id: o for o in obs if o.id}
     note = (
@@ -171,6 +178,37 @@ def mcd(obs, inv=None) -> list:
                 ],
                 response={"tier": 3, "summary": "Treat as suspicious capability until the payload is identified.",
                           "actions": ["Capture the fetched artifact in a sandbox", "Review write path and exec linkage"]},
+                composition="BP-DROPPER",
+                amplifiers=amps or None,
+                attenuators=atts or None,
+            ))
+        # Dataflow-proven dropper the text heuristics miss: intra-file taint traced a
+        # fetched value into an exec/eval/shell sink (e.g. `p = requests.get(u).text;
+        # exec(p)`) — a connected path, not co-occurrence — but the sink wasn't a
+        # literal curl-pipe/iex string, so branch 1 (direct) didn't fire. Guarded to
+        # not duplicate branches 1/2.
+        if net and run_ and not write and not direct and _dataflow_proves_dropper(inv, path):
+            n += 1
+            conf, suffix, extra, amps, atts = _dataflow_status(inv, path, {"dropper"}, 0.7, 0.9)
+            ev = _ids(_uniq(net + run_, 8))
+            findings.append(_finding(
+                f"mcd-{n}", "mcd", "Download-and-execute (dataflow-proven dropper)",
+                "Intra-file dataflow traces remote-fetched content into a code-execution sink "
+                "(exec/eval/shell) in this file — the download-and-execute dropper shape, proven "
+                "by a connected value path rather than mere co-occurrence." + suffix,
+                "high", conf, ev,
+                disproof=[
+                    "The traced value is inert data (config/text), not code, and the sink treats it as data.",
+                    "The fetched source is fixed, documented, and integrity-checked before it reaches the sink.",
+                ] + extra,
+                verification=[
+                    {"question": "What is fetched and then executed, and who controls it?",
+                     "method": "static-source", "reason": "Remote control of the executed bytes is the key risk."},
+                    {"question": "Is the fetched payload pinned by hash/signature before execution?",
+                     "method": "static-source", "reason": "Integrity verification can disprove the malicious shape."},
+                ],
+                response={"tier": 4, "summary": "Block or sandbox until the fetched payload and integrity story are verified.",
+                          "actions": ["Do not execute fetched content", "Pin/vendor the payload with integrity checks"]},
                 composition="BP-DROPPER",
                 amplifiers=amps or None,
                 attenuators=atts or None,
