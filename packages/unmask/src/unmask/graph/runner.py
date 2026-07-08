@@ -39,7 +39,7 @@ class MCDGraphDeps:
     # Optional injected pydantic-ai model for agentic review (tests pass TestModel;
     # None resolves from UNMASK_REVIEW_* at review time).
     review_model: Any = None
-    # True when re-driving an existing run (mcd resume): the run dir's caches
+    # True when re-driving an existing run (unmask resume): the run dir's caches
     # (fetched bytes, decompiled trees) are reused instead of redone.
     resume: bool = False
     scratch: dict[str, Any] = field(default_factory=dict)

@@ -100,7 +100,7 @@ Design principles carried over from the taxonomy/engine split:
    - Two pack contributions closed the data-shaped gaps: `sig.load.eval.python`
      (exec/compile→LOAD.EVAL) and `sig.xfrm.encode.base64` (base64/buffer→XFRM.ENCODE).
      PKGM.* remained algorithm-shaped → native manifest/supply passes.
-   - Not yet wired into `mcd run` (the transitional `_vendor` backend still serves the
+   - Not yet wired into `unmask run` (the transitional `_vendor` backend still serves the
      graph); cut over happens after the compose slice reproduces the BP-* readings.
 3. **Compose** — ✅ DONE. `unmask/scanner/compose/` (all 16 BP-* compositions, clean;
    `inventory.purpose` for BP-TROJAN). `tests/test_compose.py` confirms native compose
@@ -111,7 +111,7 @@ Design principles carried over from the taxonomy/engine split:
    summary (`tests/test_assess.py` gates disposition + summary vs oracle), plus a clean
    native renderer (json/md/self-contained html — a rebuild, not the 920-line port).
    `NativeScanner` (`scanner/native.py`) wires observe→compose→assess→render behind the
-   `Scanner` protocol, and `mcd run` is cut over to it.
+   `Scanner` protocol, and `unmask run` is cut over to it.
 5. **`_vendor` deleted.** The transitional engine+mcd_lens copy and the ParallaxScanner
    adapter are gone; the scanner is 100% native `unmask.scanner`. The slice-1 parity is
    frozen to `tests/fixtures/callee_parity_map.json` (5756 entries) and the oracle gate
@@ -120,7 +120,7 @@ Design principles carried over from the taxonomy/engine split:
 3. **Compose** — atoms → BP-\* findings (BP-SUPPLY / BP-OBFEXEC / BP-DROPPER /
    BP-BACKDOOR / BP-TROJAN / …). This is `mcd_lens.readings` rebuilt clean.
 4. **Assess + report** — disposition, correlation, coverage, and html/md/json
-   render. Then cut `mcd run` over to native and **delete `_vendor/`**.
+   render. Then cut `unmask run` over to native and **delete `_vendor/`**.
 5. **Binary / dataflow / supply / enrichment** — later, and binary work belongs to
    `unmask-re` (persona 2), not core.
 

@@ -30,7 +30,7 @@ review = ["pydantic-ai>=0.0.1"]
 mcp = ["mcp>=1.0.0"]
 
 [project.scripts]
-mcd = "unmask.cli:main"
+unmask = "unmask.cli:main"
 unmask-mcp = "unmask.mcp_server:main"
 
 [project.urls]

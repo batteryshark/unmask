@@ -28,10 +28,10 @@ blind spot** — never silently skipped. The command is `mcd`; the import is
 `unmask`.
 
 ```bash
-mcd run ./suspicious-package
-mcd tree ./suspicious-package
-mcd tools doctor
-mcd report --run-dir .mcd/projects/<project>/runs/<run> --format html
+unmask run ./suspicious-package
+unmask tree ./suspicious-package
+unmask tools doctor
+unmask report --run-dir .mcd/projects/<project>/runs/<run> --format html
 ```
 
 ## Layout

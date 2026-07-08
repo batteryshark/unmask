@@ -181,7 +181,7 @@ class FetchReferences(BaseNode[MCDGraphState, MCDGraphDeps, dict]):
 
         policy = FetchPolicy()
         fetchdir = d.paths.run_dir / "fetched"
-        # Durable per-run fetch cache: on `mcd resume` the bytes are reused from disk
+        # Durable per-run fetch cache: on `unmask resume` the bytes are reused from disk
         # instead of re-hitting the (attacker-referenced) network.
         manifest_path = fetchdir / "manifest.json"
         manifest: dict = {}

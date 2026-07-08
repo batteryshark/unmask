@@ -1,4 +1,4 @@
-"""MCP server: expose unmask to agents (`mcd mcp` / `unmask-mcp`).
+"""MCP server: expose unmask to agents (`unmask mcp` / `unmask-mcp`).
 
 An agent can scan a target, read the verdict, resume a run, and pull the rendered
 report — all over the Model Context Protocol. The scan itself is the same graph the CLI

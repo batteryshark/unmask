@@ -452,7 +452,7 @@ Pydantic graph runner is naturally Python.
 CLI:
 
 ```text
-mcd run <target>
+unmask run <target>
   --storage-root .mcd
   --run-id auto
   --taxonomy-root auto
@@ -466,33 +466,33 @@ mcd run <target>
   --max-review-items 100
   --max-iterations 50
 
-mcd resume --run-dir .mcd/projects/<project>/runs/<run>
-mcd resume --run-id <id>
-mcd status --run-id <id>
-mcd report --run-id <id> --format html|md|json
+unmask resume --run-dir .mcd/projects/<project>/runs/<run>
+unmask resume --run-id <id>
+unmask status --run-id <id>
+unmask report --run-id <id> --format html|md|json
 mcd qa --run-id <id> --mode rules
-mcd tree <target>
-mcd tree --run-id <id>
+unmask tree <target>
+unmask tree --run-id <id>
 mcd approve --run-id <id> <approval-id>
-mcd list --storage-root .mcd
+unmask list --storage-root .mcd
 mcd clean --storage-root .mcd --older-than 30d --keep-reports
-mcd tools doctor
-mcd tools install <tool>
-mcd tools list
-mcd tools cache
+unmask tools doctor
+unmask tools install <tool>
+unmask tools list
+unmask tools cache
 ```
 
 Advanced overrides:
 
 ```text
-mcd run <target> --run-dir <path>
-mcd run <target> --project-id <slug-or-id>
-mcd run <target> --db <path-to-run.db>
-mcd run <target> --shared-db experimental
+unmask run <target> --run-dir <path>
+unmask run <target> --project-id <slug-or-id>
+unmask run <target> --db <path-to-run.db>
+unmask run <target> --shared-db experimental
 ```
 
 `--db` is an escape hatch, not the default user experience. The normal output of
-`mcd run` should print the run id, project id, run directory, report paths, and
+`unmask run` should print the run id, project id, run directory, report paths, and
 the command needed to resume.
 
 Python API:
@@ -548,14 +548,14 @@ same ignore, size, depth, and redaction policy as inventory.
 CLI:
 
 ```text
-mcd tree <target>
+unmask tree <target>
   --max-depth 4
   --max-entries 2000
   --include-hidden false
   --format text|json
   --respect-gitignore true
 
-mcd tree --run-id <id>
+unmask tree --run-id <id>
 ```
 
 MCP:
@@ -691,7 +691,7 @@ The first implementation should use per-run databases:
 * no accidental cross-run state mutation;
 * easy archival and cleanup;
 * report bundles can be copied as a directory;
-* resume is just `mcd resume --run-dir <dir>`.
+* resume is just `unmask resume --run-dir <dir>`.
 
 SQLite settings for each `run.db`:
 
@@ -703,7 +703,7 @@ pragma foreign_keys = on;
 ```
 
 The optional `.mcd/projects/index.db` is only an index for UX commands such as
-`mcd list`, `mcd status --run-id`, and `mcd clean`. It should contain project id,
+`unmask list`, `unmask status --run-id`, and `mcd clean`. It should contain project id,
 run id, status, timestamps, target path, run dir, and report paths. The run must
 not depend on this index for correctness. If the index is missing or corrupt,
 MCD can rebuild it by walking `.mcd/projects/*/runs/*/run.json`.
@@ -725,22 +725,22 @@ for a service, not necessary for the local tool.
 UX requirements:
 
 ```text
-$ mcd run .
+$ unmask run .
 Run:      run_20260707_153012_ab12cd34ef56
 Project:  my-repo_91b3f6a412d0
 Dir:      .mcd/projects/my-repo_91b3f6a412d0/runs/20260707-153012-ab12cd34ef56
 Report:   .mcd/projects/my-repo_91b3f6a412d0/runs/20260707-153012-ab12cd34ef56/reports/report.html
-Resume:   mcd resume --run-dir .mcd/projects/my-repo_91b3f6a412d0/runs/20260707-153012-ab12cd34ef56
+Resume:   unmask resume --run-dir .mcd/projects/my-repo_91b3f6a412d0/runs/20260707-153012-ab12cd34ef56
 ```
 
 Useful commands:
 
 ```text
-mcd list
-mcd list --project my-repo_91b3f6a412d0
-mcd status --run-id run_20260707_153012_ab12cd34ef56
-mcd status --run-dir .mcd/projects/.../runs/...
-mcd report --run-id run_20260707_153012_ab12cd34ef56 --format html
+unmask list
+unmask list --project my-repo_91b3f6a412d0
+unmask status --run-id run_20260707_153012_ab12cd34ef56
+unmask status --run-dir .mcd/projects/.../runs/...
+unmask report --run-id run_20260707_153012_ab12cd34ef56 --format html
 mcd clean --failed --older-than 7d
 mcd clean --completed --older-than 30d --keep-reports
 ```
@@ -1307,7 +1307,7 @@ InitializeRun
 
 `ResolveToolchain`
 
-* Run `mcd tools doctor` internally.
+* Run `unmask tools doctor` internally.
 * Record available tools and missing capabilities.
 * Convert missing tools into coverage notes and optional `tool-install`
   approvals.
@@ -1982,7 +1982,7 @@ Do not bundle huge third-party tools in the core wheel.
 Use:
 
 * small core package;
-* `mcd tools doctor`;
+* `unmask tools doctor`;
 * optional managed downloads with checksum pinning;
 * optional "full lab" container image later;
 * documented BYO paths.
@@ -1990,9 +1990,9 @@ Use:
 Managed install must require approval unless configured:
 
 ```text
-mcd tools install jadx --yes
-mcd tools install ghidra --yes
-mcd run target --allow-tool-install jadx,ilspy
+unmask tools install jadx --yes
+unmask tools install ghidra --yes
+unmask run target --allow-tool-install jadx,ilspy
 ```
 
 Reports must state:
@@ -2134,7 +2134,7 @@ Example pending approval:
 CLI:
 
 ```text
-mcd status --run-id run-123
+unmask status --run-id run-123
 mcd approve --run-id run-123 appr-123 --yes
 mcd approve --run-id run-123 appr-123 --deny "external network not allowed for this run"
 ```
@@ -2227,7 +2227,7 @@ Acceptance:
 * Duplicate enqueue test proves stable keys work.
 * Many concurrent scans create separate run directories and do not contend on a
   shared run database.
-* `mcd list` can rebuild its index from run directories.
+* `unmask list` can rebuild its index from run directories.
 
 ### Milestone 2: Graph Skeleton
 
@@ -2240,9 +2240,9 @@ Acceptance:
 
 Acceptance:
 
-* `mcd run fixture/evil-npm` produces report from ledger state.
+* `unmask run fixture/evil-npm` produces report from ledger state.
 * Report includes project id, run id, run directory, and taxonomy manifest.
-* `mcd tree fixture/evil-npm` and `mcd tree --run-id <id>` return bounded
+* `unmask tree fixture/evil-npm` and `unmask tree --run-id <id>` return bounded
   text/JSON views.
 
 ### Milestone 3: Sandbox Provider Interface
@@ -2260,7 +2260,7 @@ Acceptance:
 ### Milestone 4: Tool Doctor And Tool Resolver
 
 * Implement manifests.
-* Implement `mcd tools doctor`.
+* Implement `unmask tools doctor`.
 * Implement BYO/PATH/cache resolution.
 * Implement missing-tool coverage notes.
 
@@ -2405,7 +2405,7 @@ Concurrency tests:
 * two scans of the same project create distinct run directories;
 * scans of different projects create distinct project ids;
 * `index.db` can be updated while independent `run.db` files are active;
-* deleting `index.db` and running `mcd list --rebuild-index` recovers prior
+* deleting `index.db` and running `unmask list --rebuild-index` recovers prior
   runs from `run.json`;
 * report writes are atomic and never expose partial final files.
 

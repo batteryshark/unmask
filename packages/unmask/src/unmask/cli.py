@@ -1,4 +1,4 @@
-"""`mcd` command-line interface.
+"""`unmask` command-line interface.
 
 First-cut surface (docs/design.md "Public Surfaces"): run, tree, tools doctor,
 status, report, list, version. Network/decompiler/approval subcommands arrive
@@ -41,7 +41,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
         print(f"Blind spot: {result.blocked_binaries} binary artifact(s) not deeply "
               f"analysed — install unmask-re")
     print(f"Report:     {result.report_paths['html']}")
-    print(f"Resume:     mcd status --run-dir {result.run_dir}")
+    print(f"Resume:     unmask status --run-dir {result.run_dir}")
     return 0 if result.status == "completed" else 1
 
 
@@ -65,7 +65,7 @@ def _cmd_tools(args: argparse.Namespace) -> int:
     from unmask.providers import discover_providers
 
     if args.tools_cmd != "doctor":
-        print("usage: mcd tools doctor", file=sys.stderr)
+        print("usage: unmask tools doctor", file=sys.stderr)
         return 2
     status = discover_providers()
     rep = status.to_report()
@@ -141,7 +141,7 @@ def _cmd_list(args: argparse.Namespace) -> int:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(prog="mcd", description="Malicious Code Detection")
+    p = argparse.ArgumentParser(prog="unmask", description="Malicious Code Detection")
     p.add_argument("--version", action="store_true", help="print version and exit")
     sub = p.add_subparsers(dest="cmd")
 
