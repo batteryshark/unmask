@@ -71,7 +71,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
     print(f"Disposition:{result.disposition!s:>12}   ({result.finding_count} finding(s))")
     if result.blocked_binaries:
         print(f"Blind spot: {result.blocked_binaries} binary artifact(s) not deeply "
-              f"analysed — install unmask-re")
+              f"analysed; install unmask-re")
     print(f"Report:     {result.report_paths['html']}")
     print(f"Resume:     unmask status --run-dir {result.run_dir}")
     return 0 if result.status == "completed" else 1

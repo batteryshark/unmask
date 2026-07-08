@@ -5,15 +5,15 @@ build-backend = "hatchling.build"
 [project]
 name = "unmask"
 version = "0.0.1"
-description = "Malicious Code Detection — is this code doing something malicious, and can you prove it? (core: static/source analysis, graph + ledger, report)"
+description = "Malicious Code Detection: is this code doing something malicious, and can you prove it? (core: static/source analysis, graph + ledger, report)"
 readme = "README.md"
 requires-python = ">=3.11"
 license = "Apache-2.0"
-authors = [{ name = "Mario Mercaldi" }]
+authors = [{ name = "batteryshark" }]
 keywords = ["security", "malware", "static-analysis", "supply-chain", "mcd"]
 
 # Core carries the scanning substrate. tree-sitter-language-pack (~5M, prebuilt
-# wheels, self-contained/offline, no compiler) drives AST callee extraction — the
+# wheels, self-contained/offline, no compiler) drives AST callee extraction, the
 # accurate default path; a regex fallback keeps the tool working where the grammar
 # wheel can't install. Heavy RE deps (lief/capstone/decompilers) stay in unmask-re.
 dependencies = [
@@ -35,7 +35,7 @@ unmask = "unmask.cli:main"
 unmask-mcp = "unmask.mcp_server:main"
 
 [project.urls]
-Homepage = "https://github.com/batteryshark/mcd"
+Homepage = "https://github.com/batteryshark/unmask"
 
 # RE providers register themselves under this group; core enumerates it at
 # ResolveToolchain. See unmask/providers.py.
