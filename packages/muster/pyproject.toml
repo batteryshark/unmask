@@ -26,3 +26,9 @@ model = ["pydantic-ai>=0.0.1"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/muster"]
+
+# The core spine schema is a .sql data file loaded at runtime by muster.ledger;
+# `packages` only grabs .py modules, so force-include it or the wheel ships a
+# ledger that can't create its own tables.
+[tool.hatch.build.targets.wheel.force-include]
+"src/muster/schema.sql" = "muster/schema.sql"

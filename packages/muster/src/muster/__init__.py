@@ -7,12 +7,13 @@ durable-question patterns). A consumer registers its DOMAIN — its tables, node
 handlers, and coverage predicate — via composition, never by muster knowing about the
 domain (see docs/investigation-engine-seam.md).
 
-Extraction in progress: slice 1 (run identity + paths) is here; the ledger core and
-graph scaffolding follow.
+Extraction in progress: slices 1 (run identity + paths) and 2 (the ledger core) are
+here; the graph scaffolding follows.
 """
 
 from __future__ import annotations
 
+from muster.ledger import Ledger, SCHEMA_VERSION, new_id, stable_key
 from muster.paths import (
     RunPaths,
     compute_project_id,
@@ -22,5 +23,6 @@ from muster.paths import (
 )
 
 __all__ = [
+    "Ledger", "SCHEMA_VERSION", "new_id", "stable_key",
     "RunPaths", "compute_project_id", "compute_run_id", "new_run_paths", "resolve_run_dir",
 ]
