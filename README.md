@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/assets/unmask-logo.png" alt="unmask" width="240">
+</p>
+
 # unmask
 
 *Malicious Code Detection: is this code doing something malicious, and can you prove it?*
