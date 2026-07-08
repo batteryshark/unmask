@@ -26,7 +26,11 @@ dependencies = ["unmask"]
 dev = ["pytest>=8"]
 
 [tool.pytest.ini_options]
-# The vendored rekit skills under packages/unmask-re/skills/ carry their own
-# (Python 2-era) test files and vendored deps — never collect from there.
-testpaths = ["tests"]
+# unmask's suite lives in tests/; muster ships its own standalone spine suite under
+# packages/muster/tests (so it travels to muster's own repo) — collect both. The
+# vendored rekit skills under packages/unmask-re/skills/ carry their own (Python 2-era)
+# test files and vendored deps, so `packages` stays in norecursedirs; an explicit
+# testpath into packages/muster/tests is still collected (norecursedirs only blocks
+# recursion, not the initial paths).
+testpaths = ["tests", "packages/muster/tests"]
 norecursedirs = ["packages", ".venv", "reference", "_vendor"]

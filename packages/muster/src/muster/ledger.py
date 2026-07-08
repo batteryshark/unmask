@@ -208,7 +208,9 @@ class Ledger:
         self.conn.execute("update work_items set status='leased', updated_at=? where id=?",
                           (_now(), row["id"]))
         self.conn.commit()
-        return row
+        # Return the post-lease row so the caller sees status='leased' (matches the
+        # docstring), not the pre-update snapshot.
+        return self.conn.execute("select * from work_items where id=?", (row["id"],)).fetchone()
 
     # --- resume (derived-state reset) ------------------------------------
     def _delete_run_rows(self, run_id: str, *tables: str) -> None:
