@@ -38,6 +38,9 @@ _MAX_TRANSFORM_PASSES = 4
 _MAX_TRANSFORMS = 64
 # Runaway backstop for the ProcessWorkQueue loop (far above any real queue depth).
 _MAX_WORK_ITEMS = 500
+# Bounds for the adaptive-lead loop (propose → execute → re-plan until dry).
+_MAX_LEAD_ROUNDS = 2
+_MAX_LEADS_PER_ROUND = 8
 
 _Ctx = GraphRunContext[MCDGraphState, MCDGraphDeps]
 
@@ -290,14 +293,14 @@ class ProcessTransforms(BaseNode[MCDGraphState, MCDGraphDeps, dict]):
     binary, so each pass re-plans over what the last pass surfaced, bounded by
     `_MAX_TRANSFORM_PASSES`/`_MAX_TRANSFORMS`."""
 
-    async def run(self, ctx: _Ctx) -> "ReviewFindings":
+    async def run(self, ctx: _Ctx) -> "ProposeLeads":
         d, s = ctx.deps, ctx.state
         _enter(ctx, "ProcessTransforms")
         scan = d.scratch.get("scan")
         observations = d.scratch.get("observations_raw")
         inv = d.scratch.get("inv")
         if scan is None or observations is None or inv is None:
-            return ReviewFindings()
+            return ProposeLeads()
         # FetchReferences may already have grown the union (fetched remote code).
         fetched_grew = bool(d.scratch.pop("union_grew", False))
         providers = d.toolchain.transform_providers()
@@ -335,7 +338,7 @@ class ProcessTransforms(BaseNode[MCDGraphState, MCDGraphDeps, dict]):
 
         if not (fetched_grew or transformed or dropped or notes):
             d.ledger.event(s.run_id, "ProcessTransforms", "note", {"transformed": 0})
-            return ReviewFindings()
+            return ProposeLeads()
 
         # Re-number the union and compose ONCE over it (fetch + transform derived),
         # then re-record the ledger from the recomposed result.
@@ -362,6 +365,96 @@ class ProcessTransforms(BaseNode[MCDGraphState, MCDGraphDeps, dict]):
                         "fetchedGrew": fetched_grew,
                         "observations": len(result.observations),
                         "findings": len(result.findings)})
+        return ProposeLeads()
+
+
+@dataclass
+class ProposeLeads(BaseNode[MCDGraphState, MCDGraphDeps, dict]):
+    """Adaptive investigation leads — the model-steered complement to the deterministic
+    catalog. The passes above guarantee coverage of rules × artifacts; this node looks at
+    RESIDUE (signal that composed into no finding) and lets a bounded model propose
+    follow-ups: WHERE to look + WHICH known action (transform/dataflow/human). Each lead
+    is a ledger work item, executed through the deterministic seam; leads only ADD
+    coverage — a real finding, a cleared note, or a tracked human lead — never a softened
+    verdict. Off unless `config.leads` + a model; a missing model is an honest note. This
+    is the engine's *lead* pattern; unmask supplies the residue + the executable actions."""
+
+    async def run(self, ctx: _Ctx) -> "ReviewFindings":
+        d, s = ctx.deps, ctx.state
+        _enter(ctx, "ProposeLeads")
+        scan = d.scratch.get("scan")
+        inv = d.scratch.get("inv")
+        observations = d.scratch.get("observations_raw")
+        if not d.config.leads or scan is None or inv is None or observations is None:
+            return ReviewFindings()
+        try:
+            from unmask.leads import build_lead_proposer
+            proposer = build_lead_proposer(d.review_model)
+        except Exception as exc:  # no model configured — honest coverage note, never a stop
+            d.scratch["leads"] = {"skipped": f"no lead model configured ({exc!r})"}
+            d.ledger.event(s.run_id, "ProposeLeads", "note", {"skipped": repr(exc)})
+            return ReviewFindings()
+
+        from unmask.leads import gather_residue, propose_leads
+        from unmask.scanner.signatures import Signatures
+        sigs = Signatures.load_vendored()
+        known_families = sigs.known_families()
+        providers = d.toolchain.transform_providers()
+        caps = {c for p in providers for c in (getattr(p, "capabilities", []) or [])}
+        workroot = str(d.paths.run_dir / "leads")
+
+        all_obs = list(observations)
+        recorded: list[dict] = []
+        attempted: set[tuple[str, str]] = set()  # (target, kind) — a lead is tried once
+        current = scan
+        for _round in range(_MAX_LEAD_ROUNDS):
+            residue = gather_residue(current)
+            if not residue:
+                break
+            leads = await asyncio.to_thread(partial(propose_leads, residue, agent=proposer))
+            leads = [ld for ld in leads if (ld.target, ld.kind) not in attempted]
+            if not leads:  # nothing new to try → dry
+                break
+            grew = False
+            for ld in leads[:_MAX_LEADS_PER_ROUND]:
+                attempted.add((ld.target, ld.kind))
+                wid = d.ledger.enqueue(
+                    run_id=s.run_id, key=stable_key(ld.target, "lead", ld.kind),
+                    target=ld.target, operation="lead", category="lead",
+                    title=f"Investigate {ld.target} ({ld.kind})",
+                    payload={"kind": ld.kind, "rationale": ld.rationale})
+                resolution, new_obs = _execute_lead(ld, inv, providers, caps, sigs,
+                                                    known_families, workroot)
+                if new_obs:
+                    all_obs.extend(new_obs)
+                    grew = True
+                d.ledger.set_work_status(
+                    wid, "done" if resolution in ("finding", "cleared") else "deferred",
+                    result={"kind": ld.kind, "resolution": resolution})
+                recorded.append({"kind": ld.kind, "target": ld.target,
+                                 "rationale": ld.rationale, "resolution": resolution})
+            if not grew:
+                break
+            for i, o in enumerate(all_obs, start=1):  # renumber so residue reflects new signal
+                o.id = f"obs-{i}"
+            current = await asyncio.to_thread(
+                partial(NativeScanner().compose_assess_render, all_obs, inv, str(s.target_path)))
+
+        d.scratch["leads"] = {"proposed": recorded,
+                              "surfaced": sum(1 for r in recorded if r["resolution"] == "finding")}
+        if len(all_obs) > len(observations):  # leads recovered signal → commit like a transform
+            for i, o in enumerate(all_obs, start=1):
+                o.id = f"obs-{i}"
+            result = await asyncio.to_thread(
+                partial(NativeScanner().compose_assess_render, all_obs, inv, str(s.target_path)))
+            d.ledger.reset_observations(s.run_id)
+            d.ledger.reset_findings(s.run_id)
+            _record_scan(ctx, result)
+            d.scratch["scan"] = result
+            d.scratch["observations_raw"] = all_obs
+        d.ledger.event(s.run_id, "ProposeLeads", "note",
+                       {"leads": len(recorded),
+                        "surfaced": sum(1 for r in recorded if r["resolution"] == "finding")})
         return ReviewFindings()
 
 
@@ -481,6 +574,9 @@ class RenderReport(BaseNode[MCDGraphState, MCDGraphDeps, dict]):
         fetch = d.scratch.get("fetch")
         if fetch:
             sections["fetch"] = fetch
+        leads = d.scratch.get("leads")
+        if leads:
+            sections["leads"] = leads
 
         reports_dir = d.paths.reports_dir
         reports_dir.mkdir(parents=True, exist_ok=True)
@@ -550,6 +646,7 @@ def build_graph() -> Graph:
         g.node(ScanAndCompose),
         g.node(FetchReferences),
         g.node(ProcessTransforms),
+        g.node(ProposeLeads),
         g.node(ReviewFindings),
         g.node(CoverageGate),
         g.node(ProcessWorkQueue),
@@ -581,8 +678,16 @@ def _handle_scan_binary(ctx: _Ctx, item: dict) -> None:
                   "analysed. Reported as a coverage blind spot.")
 
 
+def _handle_lead(ctx: _Ctx, item: dict) -> None:
+    """Defensive drain: leads are normally driven terminal inside ProposeLeads. Any left
+    queued (e.g. ProposeLeads crashed mid-loop) are deferred as tracked open leads."""
+    ctx.deps.ledger.set_work_status(item["id"], "deferred",
+        result={"note": "lead proposed but not executed (interrupted); tracked for follow-up."})
+
+
 _WORK_HANDLERS = {
     "scan-binary": _handle_scan_binary,
+    "lead": _handle_lead,
 }
 
 
@@ -684,6 +789,35 @@ def _run_transform_fixpoint(all_obs, inv, pending_binaries, providers, caps,
                       "count": len(pending_binaries),
                       "artifacts": [b.logical_path for b in pending_binaries[:20]]})
     return all_obs
+
+
+def _execute_lead(lead, inv, providers, caps, sigs, known_families, workroot: str):
+    """Run one lead through the DETERMINISTIC seam. Returns (resolution, new_observations).
+    The model chose WHERE/WHICH; whether anything surfaces is the deterministic layer's
+    call. v1 executes `transform` (force-open an artifact the triggers skipped);
+    `dataflow`/`human` become tracked open leads."""
+    if lead.kind != "transform":
+        return "human", []
+    fe = next((f for f in inv.files if f.rel == lead.target), None)
+    if fe is None:
+        return "unactionable", []
+    from unmask.transform import (ArtifactRef, TransformRequest, capability_for,
+                                  fold_results, run_transform_pass)
+    kind = "obfuscated-source" if fe.kind in ("source", "text") else classify_kind(Path(fe.path))
+    art = ArtifactRef(path=fe.path, logical_path=lead.target, kind=kind, language=fe.language)
+    cap = capability_for(art, caps)
+    if not providers or cap is None:
+        return "unactionable", []
+    leaddir = os.path.join(workroot, stable_key(lead.target, lead.kind))
+    try:
+        results = run_transform_pass([TransformRequest(artifact=art, capability=cap)], providers, leaddir)
+        outcome = fold_results(results, sigs=sigs, known_families=known_families, workdir=leaddir)
+    except Exception:
+        return "error", []
+    inv.files.extend(outcome.files)
+    if outcome.dataflow:
+        inv.dataflow = {**(inv.dataflow or {}), **outcome.dataflow}
+    return ("finding" if outcome.observations else "cleared"), outcome.observations
 
 
 def _work_id_for(ctx: _Ctx, operation: str, target: str | None = None) -> str | None:

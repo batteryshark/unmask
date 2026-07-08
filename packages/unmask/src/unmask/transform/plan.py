@@ -64,6 +64,18 @@ def _pick(preferred, capabilities: set[str], *, allow_triage: bool) -> str | Non
     return None
 
 
+def capability_for(artifact: ArtifactRef, capabilities) -> str | None:
+    """Pick a transform capability for an artifact by kind/language, IGNORING triggers.
+    plan_transforms only requests a transform when the deterministic atoms fire; a lead
+    forces one on a model-chosen artifact the triggers skipped, so it needs the same
+    kind→capability mapping without the trigger. Returns None if nothing available fits."""
+    caps = set(capabilities)
+    if artifact.kind in ("obfuscated-source", "source", "text"):
+        return _pick(_DEOBF_BY_LANG.get((artifact.language or "").lower(), _DEOBF_DEFAULT),
+                     caps, allow_triage=False)
+    return _pick(_KIND_CAPS.get(artifact.kind, ()), caps, allow_triage=True)
+
+
 def _needs_deobfuscation(atoms: set[str]) -> bool:
     if atoms & _OBF_STRUCTURAL:
         return True

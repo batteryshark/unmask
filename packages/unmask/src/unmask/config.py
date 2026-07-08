@@ -39,6 +39,10 @@ class MCDConfig:
     model: str | None = None
     # Post-report rule-tuning QA: off | rules (advisory suggestions).
     post_report_qa: str = "off"
+    # Adaptive investigation leads: the model proposes bounded follow-ups on residue
+    # (signal the deterministic passes left with no verdict). Off by default; needs a
+    # review model. Leads never author verdicts — they steer WHERE, rules judge WHAT.
+    leads: bool = False
 
     tree_enabled: bool = True
     tree_max_depth: int = 4

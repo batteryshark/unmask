@@ -17,10 +17,10 @@ from unmask.transform.contract import (
 )
 from unmask.transform.engine import FoldOutcome, fold_results, run_transform_pass
 from unmask.transform.ingest import ingest_atoms
-from unmask.transform.plan import TransformRequest, plan_transforms
+from unmask.transform.plan import TransformRequest, capability_for, plan_transforms
 
 __all__ = [
     "ArtifactRef", "DerivedSource", "EmittedAtom", "TransformProvider", "TransformResult",
     "FoldOutcome", "fold_results", "run_transform_pass",
-    "ingest_atoms", "TransformRequest", "plan_transforms",
+    "ingest_atoms", "TransformRequest", "plan_transforms", "capability_for",
 ]
