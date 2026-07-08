@@ -23,3 +23,9 @@ dependencies = ["unmask"]
 
 [dependency-groups]
 dev = ["pytest>=8"]
+
+[tool.pytest.ini_options]
+# The vendored rekit skills under packages/unmask-re/skills/ carry their own
+# (Python 2-era) test files and vendored deps — never collect from there.
+testpaths = ["tests"]
+norecursedirs = ["packages", ".venv", "reference", "_vendor"]

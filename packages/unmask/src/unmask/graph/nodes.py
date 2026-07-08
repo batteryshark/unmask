@@ -379,7 +379,7 @@ class ReviewFindings(BaseNode[MCDGraphState, MCDGraphDeps, dict]):
         if not d.config.review or scan is None or not scan.findings:
             return CoverageGate()
         try:
-            from unmask.reviewers import ReviewModelConfig, review_assessment
+            from unmask.reviewers import ReviewModelConfig, review_assessment_batched
             model = d.review_model or ReviewModelConfig.from_env().build_model()
         except Exception as exc:
             d.ledger.event(s.run_id, "ReviewFindings", "note", {"skipped": repr(exc)})
@@ -389,7 +389,11 @@ class ReviewFindings(BaseNode[MCDGraphState, MCDGraphDeps, dict]):
             return CoverageGate()
 
         assessment = scan.assessment
-        reviews, overlay = await asyncio.to_thread(partial(review_assessment, assessment, model=model))
+        # Batched record-tool review: findings drain in bounded chunks via a
+        # sequential record_finding_review tool, so a large run can't hit an
+        # output-size limit. Falls back to single-finding review for small counts.
+        reviews, overlay = await asyncio.to_thread(
+            partial(review_assessment_batched, assessment, model=model))
         d.scratch["reviews"] = reviews  # for post-report rule-tuning QA
         model_name = getattr(d.config, "model", None) or type(model).__name__
         for r in reviews:

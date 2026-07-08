@@ -94,3 +94,88 @@ def test_native_observe_no_under_detection(name, rel):
               json.loads((REPO_ROOT / "tests" / "oracle" / "golden" / name / "observations.json").read_text())}
     missing = golden - native
     assert not missing, f"{name}: native observe under-detects vs oracle: {sorted(missing)}"
+
+
+# --- false-positive fixes --------------------------------------------------
+
+def test_regexp_exec_not_classified_as_shell(tmp_path):
+    """``RegExp.prototype.exec()`` is the most common method call in JS — the bare
+    callee ``.exec`` must NOT fire EXEC.SHELL unless the file has child_process
+    evidence. This is the single biggest FP source in minified bundles."""
+    (tmp_path / "app.js").write_text(
+        'var re = /^foo$/;\n'
+        'var m = re.exec("foo");\n'
+        'var m2 = /^bar/.exec("bar");\n'
+        'var m3 = someRegex.exec(input);\n',
+        encoding="utf-8")
+    inv = build_inventory(str(tmp_path))
+    exec_atoms = [o for o in observe_callee(inv)
+                  if o.atom == "EXEC.SHELL" and "exec" in (o.evidence or "").lower()]
+    assert not exec_atoms, (
+        f"RegExp.exec must not fire EXEC.SHELL without child_process evidence; "
+        f"got {[(o.evidence, o.line) for o in exec_atoms]}")
+
+
+def test_child_process_exec_still_detected(tmp_path):
+    """When child_process IS imported, ``.exec`` correctly fires EXEC.SHELL — the
+    gate does not suppress real shell execution."""
+    (tmp_path / "app.js").write_text(
+        'const cp = require("child_process");\n'
+        'cp.exec("ls -la", (e, out) => console.log(out));\n',
+        encoding="utf-8")
+    inv = build_inventory(str(tmp_path))
+    exec_atoms = [o for o in observe_callee(inv) if o.atom == "EXEC.SHELL"]
+    assert exec_atoms, "child_process.exec must still fire EXEC.SHELL"
+    assert any("exec" in (o.evidence or "") for o in exec_atoms)
+
+
+def test_cred_in_blocklist_not_flagged(tmp_path):
+    """Credential filenames inside a ``new Set(["id_rsa", ...])`` exclusion list
+    are a protection pattern (the app EXCLUDES sensitive files from indexing), not
+    credential reads. The semantic inversion must be suppressed."""
+    (tmp_path / "config.js").write_text(
+        'var sensitiveFiles = new Set([".env", ".env.local", ".npmrc", '
+        '"id_rsa", "id_dsa", "id_ecdsa", "id_ed25519"]);\n'
+        '// these files are excluded from the index for security\n',
+        encoding="utf-8")
+    inv = build_inventory(str(tmp_path))
+    cred_obs = [o for o in observe_content(inv) if o.atom.startswith("CRED.")]
+    assert not cred_obs, (
+        f"CRED atoms inside a blocklist Set must be suppressed; "
+        f"got {[(o.atom, o.evidence) for o in cred_obs]}")
+
+
+def test_cred_outside_blocklist_still_flagged(tmp_path):
+    """A credential path read OUTSIDE a blocklist (a real ``readFileSync`` target)
+    must still fire CRED.SSH."""
+    (tmp_path / "steal.js").write_text(
+        'const fs = require("fs");\n'
+        'const key = fs.readFileSync(process.env.HOME + "/.ssh/id_rsa");\n'
+        'upload(key);\n',
+        encoding="utf-8")
+    inv = build_inventory(str(tmp_path))
+    cred_obs = [o for o in observe_content(inv) if o.atom.startswith("CRED.")]
+    assert cred_obs, "a real credential read must still fire CRED"
+
+
+def test_grammar_files_are_skipped(tmp_path):
+    """TextMate/VS Code language grammar definitions contain command names
+    (ipconfig, nslookup, runas, net localgroup) as syntax-highlighting data — they
+    must be skipped entirely, not scanned as if their example commands were real."""
+    (tmp_path / "bat-BSseGlJ2.js").write_text(
+        '// batch file language grammar\n'
+        'module.exports = {\n'
+        '  scopeName: "source.batchfile",\n'
+        '  fileTypes: ["bat", "cmd"],\n'
+        '  patterns: [\n'
+        '    { match: "\\b(ipconfig|nslookup|runas|net localgroup)\\b",\n'
+        '      name: "keyword.control.batchfile" },\n'
+        '  ],\n'
+        '  repository: {\n'
+        '    commands: { begin: "^", end: "$", captures: { 1: { patterns: [] } } }\n'
+        '  }\n};\n',
+        encoding="utf-8")
+    inv = build_inventory(str(tmp_path))
+    obs = observe_content(inv)
+    assert not obs, (
+        f"grammar file must produce zero atoms; got {[(o.atom, o.evidence) for o in obs]}")

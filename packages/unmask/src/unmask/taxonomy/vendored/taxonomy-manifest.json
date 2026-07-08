@@ -1,7 +1,7 @@
 {
   "schemaVersion": "0.1.0",
   "taxonomyId": "parallax-taxonomy",
-  "sourceGitCommit": "2d0a045d1bff6b349271e81ae03bcf41dd12ce46",
+  "sourceGitCommit": "c4f02328bed72906f8134501a8ff1df89e7821ad",
   "includedRoots": [
     "signatures",
     "reference"
@@ -45,7 +45,7 @@
     },
     {
       "path": "signatures/README.md",
-      "sha256": "fe3f754d38b7d1492007c53c23026400264790fc8aa634d937c838921a48605f"
+      "sha256": "c26cbf284dc373d09da9a7ceb16647f594c9a1554a835a2eace18ac951a40e13"
     },
     {
       "path": "signatures/examples/core-surfaces.yaml",
@@ -69,7 +69,7 @@
     },
     {
       "path": "signatures/packs/content-surfaces.yaml",
-      "sha256": "69498f9e43d1c44adbc3f13c916f42ab79b708f3fb33a2ccd30a8e68a3fa880e"
+      "sha256": "6936d6b8f0d3c8a89c7e409a6e1b6320fdebc6e50a87bcb5bb9a9e85b0daaec9"
     },
     {
       "path": "signatures/packs/source-callees.json",
@@ -77,7 +77,7 @@
     },
     {
       "path": "signatures/packs/source-callees.yaml",
-      "sha256": "678e63c25566207ec562c8a0aff0342843b76478a3ed31c259692e8e634c0d35"
+      "sha256": "203ca728ba05deba9247ad5482759a2d14ecfa7ae2c007bbbcad767a4d1c281f"
     },
     {
       "path": "signatures/schema.json",

@@ -1,0 +1,9 @@
+{
+  "name": "build-tool",
+  "version": "3.2.1",
+  "description": "a fast build tool",
+  "main": "index.js",
+  "bin": { "build-tool": "./cli.js" },
+  "scripts": { "build": "tsc" },
+  "license": "MIT"
+}

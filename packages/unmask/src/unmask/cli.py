@@ -14,8 +14,21 @@ from pathlib import Path
 
 
 def _cmd_run(args: argparse.Namespace) -> int:
+    import os
+
     from unmask.config import MCDConfig
     from unmask.run import run_mcd
+
+    # --model overrides the review model (parsed as [provider:]model_id). If the
+    # user passes --model we set the env vars ReviewModelConfig reads, so the same
+    # code path works for CLI and API callers.
+    if getattr(args, "model", None):
+        spec = args.model.split(":", 1)
+        if len(spec) == 2:
+            os.environ.setdefault("UNMASK_REVIEW_PROVIDER", spec[0])
+            os.environ.setdefault("UNMASK_REVIEW_MODEL", spec[1])
+        else:
+            os.environ.setdefault("UNMASK_REVIEW_MODEL", spec[0])
 
     config = MCDConfig(
         storage_root=args.storage_root,
@@ -25,6 +38,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
         tool_profile=args.tool_profile,
         review=args.review or args.post_report_qa != "off",  # QA needs review judgments
         post_report_qa=args.post_report_qa,
+        model=getattr(args, "model", None),
     )
     result = run_mcd(args.target, config)
 
@@ -160,6 +174,9 @@ def build_parser() -> argparse.ArgumentParser:
                      choices=["static", "source", "binary", "full"])
     run.add_argument("--review", action="store_true",
                      help="agentic adjudication of findings (needs unmask[review] + UNMASK_REVIEW_*)")
+    run.add_argument("--model", default=None,
+                     help="review model as [provider:]model_id, e.g. lmstudio:qwen2.5-27b or "
+                          "openai:gpt-4o (sets UNMASK_REVIEW_PROVIDER/MODEL; implies nothing without --review)")
     run.add_argument("--post-report-qa", default="off", choices=["off", "rules"],
                      help="advisory rule-tuning feedback over reviewed findings (implies --review)")
     run.add_argument("--json", action="store_true")

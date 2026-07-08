@@ -22,3 +22,25 @@ re = "unmask_re.provider:provider"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/unmask_re"]
+# The vendored skills ship as data files alongside the provider: self-contained
+# runtime payloads (pure-stdlib runners, vendored node_modules for js-deobfuscate,
+# vendored decompyle3 site for pyc-decompile). Without these in the wheel the
+# provider has nothing to shell out to. Re-vendor with `scripts/sync_skills.py`.
+artifacts = [
+    "skills/**/skill.json",
+    "skills/**/SKILL.md",
+    "skills/**/*.py",
+    "skills/**/*.mjs",
+    "skills/**/*.js",
+    "skills/**/*.sh",
+    "skills/**/*.json",
+    "skills/**/*.md",
+    "skills/skills-manifest.json",
+]
+# node_modules (js-deobfuscate) and site (pyc-decompile) are large vendored deps
+# with non-.py extensions; force-include the whole skills tree so nothing is
+# silently dropped by the .py-only wheel builder.
+force-include = { "skills" = "skills" }
+
+[tool.hatch.build.targets.sdist]
+include = ["src/unmask_re", "skills", "scripts", "README.md", "pyproject.toml"]

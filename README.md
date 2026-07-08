@@ -37,29 +37,47 @@ unmask report --run-dir .mcd/projects/<project>/runs/<run> --format html
 ## Layout
 
 ```
-packages/unmask/       core: storage, ledger, graph, inventory/tree, scanner
-                       adapter, report augmentation, CLI
-packages/unmask-re/    heavy: RE provider registration (capability stub today)
+packages/unmask/       core: storage, ledger, graph, inventory/tree, scanner,
+                      contextual attenuators, report augmentation, CLI
+packages/unmask-re/    RE skills: unpack, js-deobfuscate, jvm/dotnet/pyc-decompile,
+                      bin-triage, covert-scans, secrets-scan (vendored from rekit)
 docs/design.md         the graph + ledger design of record
 ```
 
-## Status (first build cut)
+## Status (v0.1)
 
 Runnable end to end: `run` walks the target, generates a bounded tree, runs the
-deterministic scanner (parallax `engine` + `mcd_lens`) behind a `Scanner` adapter,
-persists observations/findings to the ledger, routes binaries through the RE
-plugin boundary, and renders `report.{html,md,json}` from the run directory.
+deterministic scanner, persists observations/findings to the per-run SQLite ledger,
+routes binaries and obfuscated source through the **RE transform seam** (deobfuscate /
+decompile / unpack via vendored rekit skills in `unmask-re`), optionally fetches
+referenced remote code as evidence (`--network fetch-only`), runs an **agentic
+adjudication** overlay (`--review`), and renders `report.{html,md,json}` with
+syntax-highlighted evidence, a table of contents, and severity filter chips.
 
-The scanner (parallax `engine` + `mcd_lens`, both pure stdlib) and the taxonomy
-signature data are **vendored into the `unmask` wheel** (`_vendor/` and
-`taxonomy/vendored/`), so core is self-contained — no sibling
-`parallax-goalpacks` / `parallax-taxonomy` checkout is needed at runtime.
-`--scanner-root` / `$UNMASK_SCANNER_ROOT` remain only as a dev override for
-hacking against a live checkout. Re-vendor with
-`python packages/unmask/scripts/vendor.py` (CI staleness check: `--check`).
-The phases run on a small internal
-runner shaped for a drop-in swap to Pydantic Graph. See `docs/design.md` for the
-full milestone plan (container expansion, decompilers, agentic review, network
-fetch, MCP surface, post-report QA).
+**Deterministic false-positive control.** Contextual attenuators keep benign repos
+out of auto-quarantine: documented installer idioms (`curl … astral.sh/uv/install.sh
+| sh`), CI/Dockerfile/install-script contexts, documentation files, and download-page
+UI routes attenuate confidence without removing findings — so a normal codebase
+scans to `review`/`clear`, while a genuine dropper still quarantines. The attenuators
+are a post-compose interpretation layer; the compose oracle stays judgment-free.
+
+**Batched agentic review.** Findings drain through a pydantic-ai record tool in
+bounded chunks, so a 50+ finding run can't hit an output-size limit; any finding the
+model skips falls through to `needs_human` — never a silent drop.
+
+The phases run on a **Pydantic Graph** workflow; the **SQLite ledger** is the
+durable source of truth for coverage and resumability — the model never decides
+completion. See `docs/design.md` for the full design and the deferred milestones
+(sandbox providers beyond local, dynamic execution, tool-install CLI, registry
+metadata — documented blind spots in v0.1).
+
+### What's a blind spot in v0.1
+
+- **Dynamic execution / sandboxing** — no VM/container/network-capture; static +
+  transform only (decompilers extract source, never run it).
+- **Tool-install CLI** — jadx/ilspycmd/ghidra are BYO (prereq-gated: missing → honest
+  blind spot, not a crash). `unmask tools doctor` reports what resolved.
+- **Registry metadata** — npm/PyPI/etc. enrichment is offline; confidence reflects
+  static evidence without external corroboration.
 
 Apache-2.0

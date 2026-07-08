@@ -335,6 +335,59 @@ h2.sec .count{color:var(--faint); font-weight:600; text-transform:none; letter-s
   h2.sec{break-after:avoid; page-break-after:avoid}
   a{color:inherit; text-decoration:none}
 }
+
+/* Syntax highlighting (token overlay on already-escaped evidence text) */
+.ev pre{color:#d4d4d4}
+.tok-c{color:#6a9955; font-style:italic}            /* comment */
+.tok-s{color:#ce9178}                                 /* string */
+.tok-k{color:#569cd6}                                 /* keyword */
+.tok-n{color:#b5cea8}                                 /* number */
+.tok-f{color:#dcdcaa}                                 /* function name */
+.tok-a{color:#9cdcfe}                                 /* attribute/flag */
+.tok-v{color:#9cdcfe}                                 /* variable */
+.tok-y{color:#9cdcfe}                                 /* yaml key */
+.tok-t{color:#4ec9b0}                                 /* type/builtin */
+.tok-o{color:#d4d4d4}                                 /* operator */
+
+/* Table of contents */
+.toc{background:var(--panel); border:1px solid var(--line-soft); border-radius:10px;
+  padding:12px 16px; margin:0 0 18px}
+.toc .toc-h{font-size:11px; font-weight:700; letter-spacing:.09em; text-transform:uppercase;
+  color:var(--faint); margin-bottom:8px}
+.toc ul{margin:0; padding:0; list-style:none; display:flex; flex-wrap:wrap; gap:6px 14px}
+.toc a{font-size:13px; color:var(--muted); text-decoration:none}
+.toc a:hover{color:var(--accent)}
+
+/* Severity filter chips (toggle visibility of severity groups) */
+.filters{display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin:14px 0 4px}
+.filters .flbl{font-size:11px; font-weight:700; letter-spacing:.09em; text-transform:uppercase;
+  color:var(--faint); margin-right:4px}
+.fchip{display:inline-flex; align-items:center; gap:5px; font-size:12px; font-weight:700;
+  padding:4px 11px; border-radius:999px; cursor:pointer; user-select:none;
+  border:1px solid transparent; background:var(--panel-2); color:var(--muted);
+  transition:opacity .12s}
+.fchip .n{font-weight:600; opacity:.7; font-size:11px}
+.fchip.off{opacity:.35}
+.fchip.critical{border-color:rgba(255,107,107,.4); color:var(--crit)}
+.fchip.high{border-color:rgba(255,159,69,.4); color:var(--high)}
+.fchip.medium{border-color:rgba(255,210,60,.4); color:var(--med)}
+.fchip.low{border-color:rgba(99,201,138,.4); color:var(--low)}
+.fchip.informational{border-color:rgba(122,162,196,.4); color:var(--info)}
+
+/* Collapsible finding cards (native <details>, zero JS) */
+details.card{padding:0; overflow:hidden}
+details.card > summary{list-style:none; cursor:pointer; padding:18px 20px;
+  display:flex; align-items:flex-start; justify-content:space-between; gap:14px; flex-wrap:wrap}
+details.card > summary::-webkit-details-marker{display:none}
+details.card[open] > summary{border-bottom:1px solid var(--line-soft)}
+details.card > summary .chevron{color:var(--faint); font-size:14px; flex:0 0 auto;
+  transition:transform .15s; margin-top:3px}
+details.card[open] > summary .chevron{transform:rotate(90deg)}
+details.card .card-body{padding:0 20px 18px}
+details.card .card-body .claim{margin-top:12px}
+details.card > summary .h3wrap{flex:1 1 260px}
+details.card > summary h3{margin:0; font-size:18px; font-weight:700; line-height:1.35}
+.hidden{display:none !important}
 """
 
 
@@ -342,6 +395,28 @@ def _esc(s) -> str:
     # Escape rigorously, but do not swallow meaningful falsy values (0, False):
     # only None renders as empty.
     return html.escape("" if s is None else str(s))
+
+
+_LANG_BY_EXT = {
+    ".js": "javascript", ".mjs": "javascript", ".cjs": "javascript", ".jsx": "javascript",
+    ".ts": "typescript", ".tsx": "typescript",
+    ".py": "python", ".pyw": "python",
+    ".sh": "shell", ".bash": "shell", ".zsh": "shell",
+    ".json": "json", ".jsonc": "json",
+    ".yaml": "yaml", ".yml": "yaml",
+    ".ps1": "shell", ".psm1": "shell",
+    ".rb": "ruby", ".go": "go", ".rs": "rust", ".java": "java",
+    ".yml": "yaml",
+}
+
+
+def _lang_for_path(path: str) -> str:
+    """Infer a highlight language from the evidence file's extension."""
+    p = str(path or "").lower()
+    for ext, lang in _LANG_BY_EXT.items():
+        if p.endswith(ext):
+            return lang
+    return ""
 
 
 def _sev_meta(sev: str) -> tuple[str, str]:
@@ -365,19 +440,31 @@ def _confidence_chip(conf, label) -> str:
             f"{_esc(pct)}{lbl_html}</span>")
 
 
-def _finding_card(f: dict, obs_by_id: dict) -> str:
+def _finding_card(f: dict, obs_by_id: dict, *, collapsible: bool = False) -> str:
     sev_cls, _ = _sev_meta(f.get("severity") or "informational")
-    parts: list[str] = ["<article class='card'>"]
+    # Collapsible cards use <details>/<summary> (zero JS); non-collapsible keep the
+    # plain <article> shape. The body (claim/disproof/verify/response/evidence) is
+    # identical either way.
+    if collapsible:
+        parts: list[str] = ["<details class='card'><summary>"]
+    else:
+        parts = ["<article class='card'>"]
 
     # Header: title + the two independent axes as separate chips.
     chips = [f"<span class='chip sev-{sev_cls}'><span class='k'>severity</span> {_esc(sev_cls)}</span>",
              _confidence_chip(f.get("confidence"), f.get("confidenceLabel"))]
     if f.get("composition"):
         chips.append(f"<span class='chip comp'>{_esc(f.get('composition'))}</span>")
-    parts.append("<div class='top'>")
-    parts.append(f"<h3>{_esc(f.get('title'))}</h3>")
-    parts.append("<div class='chips'>" + "".join(chips) + "</div>")
-    parts.append("</div>")
+    chips_html = "<div class='chips'>" + "".join(chips) + "</div>"
+    if collapsible:
+        parts.append(f"<span class='chevron' aria-hidden='true'>▶</span>")
+        parts.append(f"<span class='h3wrap'><h3>{_esc(f.get('title'))}</h3>{chips_html}</span>")
+        parts.append("</summary><div class='card-body'>")
+    else:
+        parts.append("<div class='top'>")
+        parts.append(f"<h3>{_esc(f.get('title'))}</h3>")
+        parts.append(chips_html)
+        parts.append("</div>")
 
     if f.get("claim"):
         parts.append(f"<p class='claim'>{_esc(f.get('claim'))}</p>")
@@ -411,8 +498,11 @@ def _finding_card(f: dict, obs_by_id: dict) -> str:
                      f"{actions_html}</div>")
 
     # Cited evidence (file:line + matched text), where the observation is available.
+    # The matched-text <pre> is syntax-highlighted (language inferred from the file
+    # extension) so the evidence reads like code, not a wall of monospace.
     ev_obs = [obs_by_id[oid] for oid in (f.get("evidence") or []) if oid in obs_by_id]
     if ev_obs:
+        from unmask.scanner.assess.highlight import highlight
         rows = []
         for o in ev_obs:
             loc = o.get("location") or {}
@@ -425,14 +515,18 @@ def _finding_card(f: dict, obs_by_id: dict) -> str:
             summ = (f"<div class='summ'>{_esc(evd.get('summary'))}</div>"
                     if evd.get("summary") else "")
             matched = evd.get("matchedText")
-            pre = f"<pre>{_esc(matched)}</pre>" if matched else ""
+            lang = _lang_for_path(loc.get("path") or "")
+            pre = f"<pre class='lang-{_esc(lang)}'>{highlight(_esc(matched), lang)}</pre>" if matched else ""
             rows.append("<div class='ev'>"
                         f"<div class='evhead'><span class='loc'>{where}</span>{atom}{summ}</div>"
                         f"{pre}</div>")
         parts.append("<div class='block'><div class='h'>Evidence</div>"
                      "<div class='evidence'>" + "".join(rows) + "</div></div>")
 
-    parts.append("</article>")
+    if collapsible:
+        parts.append("</div></details>")
+    else:
+        parts.append("</article>")
     return "".join(parts)
 
 
@@ -475,6 +569,7 @@ def render_html(assessment: dict) -> str:
     summ = assessment.get("summary") or {}
     target = (assessment.get("target") or {}).get("path", "")
     obs_by_id = {o.get("id"): o for o in (assessment.get("observations") or []) if o.get("id")}
+    corrs = assessment.get("correlations") or []
 
     p: list[str] = [
         "<!doctype html><html lang='en'><head><meta charset='utf-8'>",
@@ -492,7 +587,7 @@ def render_html(assessment: dict) -> str:
     p.append("</div>")
 
     # Disposition banner
-    p.append(f"<section class='banner {cls}' role='region' aria-label='Disposition'>")
+    p.append(f"<section class='banner {cls}' id='disposition' role='region' aria-label='Disposition'>")
     p.append("<div class='verdict'><span class='dot' aria-hidden='true'></span>"
              f"<h1>{_esc(rec).upper()}</h1></div>")
     p.append(f"<p class='blurb'>{_esc(_DISPOSITION_BLURB.get(rec, ''))}</p>")
@@ -540,26 +635,60 @@ def render_html(assessment: dict) -> str:
     # Findings grouped by severity
     groups = _findings_by_severity(assessment.get("findings") or [])
     total = summ.get("findingCount", sum(len(g) for _, g in groups))
-    p.append(f"<h2 class='sec'>Findings <span class='count'>({_esc(total)})</span></h2>")
+
+    # Table of contents — anchor links to each section, so a long report is navigable.
+    toc_items = [
+        ("disposition", "Disposition"),
+        ("findings", f"Findings ({total})"),
+    ]
+    for sev, group in groups:
+        toc_items.append((f"sev-{sev}", f"{sev.capitalize()} ({len(group)})"))
+    if corrs:
+        toc_items.append(("correlations", f"Correlations ({len(corrs)})"))
+    toc_items.append(("coverage", "Coverage"))
+    toc_links = "".join(f"<li><a href='#{slug}'>{_esc(label)}</a></li>" for slug, label in toc_items)
+    p.append(f"<nav class='toc' id='toc'><div class='toc-h'>Contents</div><ul>{toc_links}</ul></nav>")
+
+    # Severity filter chips — clicking toggles severity groups on/off via a tiny
+    # inline script (the only JS in the report; degrades to all-visible without it).
+    p.append(f"<h2 class='sec' id='findings'>Findings <span class='count'>({_esc(total)})</span></h2>")
     if groups:
+        filter_chips = []
+        for sev, group in groups:
+            sev_cls, sev_label = _sev_meta(sev)
+            filter_chips.append(
+                f"<span class='fchip {sev_cls}' data-sev='{sev_cls}' role='button' tabindex='0'>"
+                f"{_esc(sev_label)} <span class='n'>{len(group)}</span></span>")
+        p.append("<div class='filters'><span class='flbl'>Filter</span>" + "".join(filter_chips) + "</div>")
+        p.append("<script>\n"
+                 "document.querySelectorAll('.fchip').forEach(c=>{"
+                 "const t=()=>{c.classList.toggle('off');"
+                 "document.querySelectorAll('.sevgroup.'+c.dataset.sev).forEach(g=>"
+                 "g.classList.toggle('hidden',c.classList.contains('off')))};"
+                 "c.addEventListener('click',t);c.addEventListener('keydown',"
+                 "e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();t()}})});\n"
+                 "</script>")
         for sev, group in groups:
             sev_cls, sev_label = _sev_meta(sev)
             plural = "finding" if len(group) == 1 else "findings"
-            p.append("<div class='sevgroup'><div class='sevhead'>"
+            p.append(f"<div class='sevgroup {sev_cls}' id='sev-{sev}'>")
+            p.append("<div class='sevhead'>"
                      f"<span class='bar {sev_cls}'></span>"
                      f"<span class='name {sev_cls}'>{_esc(sev_label)}</span>"
                      f"<span class='n'>· {len(group)} {plural}</span></div>")
+            # Collapse cards when there are many findings in a group; leave them
+            # expanded for small groups so the detail is visible by default.
+            use_collapse = len(group) > 3
             for f in group:
-                p.append(_finding_card(f, obs_by_id))
+                p.append(_finding_card(f, obs_by_id, collapsible=use_collapse))
             p.append("</div>")
     else:
         p.append("<div class='empty'>No malicious-code findings under the implemented "
                  "compositions.</div>")
 
     # Correlations
-    corrs = assessment.get("correlations") or []
     if corrs:
-        p.append(f"<h2 class='sec'>Correlations <span class='count'>({len(corrs)})</span></h2>")
+        p.append(f"<h2 class='sec' id='correlations'>Correlations <span class='count'>({len(corrs)})</span></h2>")
         for c in corrs:
             p.append("<div class='corr'>")
             p.append(f"<div class='narr'>{_esc(c.get('narrative'))}</div>")
@@ -583,7 +712,7 @@ def render_html(assessment: dict) -> str:
     cov = assessment.get("coverage") or {}
     notes = cov.get("notes", [])
     if notes:
-        p.append("<h2 class='sec'>Coverage</h2>")
+        p.append("<h2 class='sec' id='coverage'>Coverage</h2>")
         p.append("<ul class='covlist'>"
                  + "".join(f"<li>{_esc(n)}</li>" for n in notes) + "</ul>")
     contract_note = (assessment.get("contract") or {}).get("note", "")

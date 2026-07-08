@@ -1,0 +1,547 @@
+{
+  "schemaVersion": "0.1.0",
+  "sourceRoot": "/Users/batteryshark/Downloads/runner-lab/rekit",
+  "skills": [
+    {
+      "id": "unpack",
+      "name": "Archive Unpacker (recursive, safe)",
+      "version": "0.1.0",
+      "capabilities": [
+        "unpack-archive",
+        "extract-recursive"
+      ],
+      "prerequisites": [
+        {
+          "tool": "python3",
+          "min_version": "3.8",
+          "check": [
+            "python3",
+            "--version"
+          ],
+          "install_hint": "Install Python 3.8+ (3.12+ enables tarfile's safe 'data' filter). Pure stdlib for zip/tar/gz/bz2/xz."
+        }
+      ],
+      "entry": {
+        "command": [
+          "python3",
+          "runtime/unpack.py"
+        ],
+        "args": [
+          {
+            "name": "input",
+            "type": "file",
+            "required": true,
+            "desc": "archive to extract"
+          },
+          {
+            "name": "outdir",
+            "type": "dir",
+            "required": true,
+            "desc": "output directory"
+          },
+          {
+            "name": "--max-depth",
+            "type": "int",
+            "required": false,
+            "desc": "nested-archive recursion depth (default 8)"
+          },
+          {
+            "name": "--max-bytes",
+            "type": "int",
+            "required": false,
+            "desc": "total extracted-bytes budget (default 512 MiB)"
+          }
+        ],
+        "result": {
+          "channel": "stdout",
+          "format": "json",
+          "fields": {
+            "ok": "bool",
+            "format": "string",
+            "extractedTo": "string",
+            "fileCount": "int",
+            "nestedArchives": "array",
+            "skipped": "array",
+            "toolsMissing": "array"
+          }
+        }
+      },
+      "sha256": "f0fb8f9b3c6af89ceccb2194ab4788b798cadc229766960801272b4796b0dee1"
+    },
+    {
+      "id": "bin-triage",
+      "name": "Binary Triage (format-agnostic)",
+      "version": "0.1.0",
+      "capabilities": [
+        "triage-binary",
+        "identify-format",
+        "extract-strings",
+        "detect-embedded",
+        "emit-atoms"
+      ],
+      "prerequisites": [
+        {
+          "tool": "python3",
+          "min_version": "3.8",
+          "check": [
+            "python3",
+            "--version"
+          ],
+          "install_hint": "Install Python 3.8+ \u2014 pure stdlib, no other dependency."
+        }
+      ],
+      "entry": {
+        "command": [
+          "python3",
+          "runtime/triage.py"
+        ],
+        "args": [
+          {
+            "name": "input",
+            "type": "file",
+            "required": true,
+            "desc": "any file to triage"
+          },
+          {
+            "name": "--format",
+            "type": "enum",
+            "required": false,
+            "desc": "text | json (default text)"
+          },
+          {
+            "name": "--max-bytes",
+            "type": "int",
+            "required": false,
+            "desc": "read cap (default 64 MiB)"
+          }
+        ],
+        "result": {
+          "channel": "stdout",
+          "format": "text|json",
+          "fields": {
+            "ok": "bool",
+            "size": "int",
+            "formats": "array",
+            "entropyFirstMiB": "number",
+            "interestingStrings": "object",
+            "embeddedSignatures": "array",
+            "atoms": "array"
+          }
+        }
+      },
+      "sha256": "a8bd3d62b228a5355ab25445f9ebb0ad3e5db50bb60372cf146c00f92af07d5b"
+    },
+    {
+      "id": "js-deobfuscate",
+      "name": "JavaScript Deobfuscator",
+      "version": "0.1.0",
+      "capabilities": [
+        "deobfuscate-js",
+        "unpack-js-bundle",
+        "unminify-js"
+      ],
+      "prerequisites": [
+        {
+          "tool": "node",
+          "min_version": "18",
+          "check": [
+            "node",
+            "--version"
+          ],
+          "install_hint": "Install Node.js >= 18 (an LTS is safest for the isolated-vm prebuilt ABI). The tool is vendored; no npm/network is needed at run time."
+        }
+      ],
+      "entry": {
+        "command": [
+          "node",
+          "runtime/run.mjs"
+        ],
+        "args": [
+          {
+            "name": "input",
+            "type": "file",
+            "required": true,
+            "desc": "path to the obfuscated .js"
+          },
+          {
+            "name": "outdir",
+            "type": "dir",
+            "required": true,
+            "desc": "output dir; writes deobfuscated.js and, for bundles, unpacked/ modules"
+          }
+        ],
+        "result": {
+          "channel": "stdout",
+          "format": "json",
+          "fields": {
+            "ok": "bool",
+            "outputFile": "string",
+            "unpackedDir": "string|null",
+            "moduleCount": "int",
+            "bytesIn": "int",
+            "bytesOut": "int",
+            "changed": "bool"
+          }
+        }
+      },
+      "sha256": "183b3ffbd404f7e17e25f118d46a38550238226390692d08871f51e32ea3a23e"
+    },
+    {
+      "id": "jvm-decompile",
+      "name": "JVM / Android Decompiler",
+      "version": "0.1.0",
+      "capabilities": [
+        "decompile-jvm",
+        "decompile-apk",
+        "decompile-dex",
+        "decompile-jar"
+      ],
+      "prerequisites": [
+        {
+          "tool": "python3",
+          "min_version": "3.8",
+          "check": [
+            "python3",
+            "--version"
+          ],
+          "install_hint": "Install Python 3.8+ for the runner."
+        },
+        {
+          "tool": "jadx",
+          "check": [
+            "jadx",
+            "--version"
+          ],
+          "install_hint": "Install jadx (https://github.com/skylot/jadx) and put it on PATH; jadx needs a JRE (java >= 11)."
+        }
+      ],
+      "entry": {
+        "command": [
+          "python3",
+          "runtime/run.py"
+        ],
+        "args": [
+          {
+            "name": "input",
+            "type": "file",
+            "required": true,
+            "desc": ".apk / .dex / .jar / .class"
+          },
+          {
+            "name": "outdir",
+            "type": "dir",
+            "required": true,
+            "desc": "output dir for decompiled Java"
+          },
+          {
+            "name": "--format",
+            "type": "enum",
+            "required": false,
+            "desc": "text | json (default text)"
+          }
+        ],
+        "result": {
+          "channel": "stdout",
+          "format": "text|json",
+          "fields": {
+            "ok": "bool",
+            "tool": "string",
+            "outputDir": "string",
+            "filesWritten": "int",
+            "exitCode": "int"
+          }
+        }
+      },
+      "sha256": "86919114b5c919ae460cd3d1a47bee6d00cbebc6631b9f75cdd8dbfc97b298dd"
+    },
+    {
+      "id": "dotnet-decompile",
+      "name": ".NET Decompiler",
+      "version": "0.1.0",
+      "capabilities": [
+        "decompile-dotnet",
+        "decompile-il-to-csharp"
+      ],
+      "prerequisites": [
+        {
+          "tool": "python3",
+          "min_version": "3.8",
+          "check": [
+            "python3",
+            "--version"
+          ],
+          "install_hint": "Install Python 3.8+ for the runner."
+        },
+        {
+          "tool": "ilspycmd",
+          "check": [
+            "ilspycmd",
+            "--version"
+          ],
+          "install_hint": "dotnet tool install -g ilspycmd  (needs the .NET SDK/runtime)"
+        }
+      ],
+      "entry": {
+        "command": [
+          "python3",
+          "runtime/run.py"
+        ],
+        "args": [
+          {
+            "name": "input",
+            "type": "file",
+            "required": true,
+            "desc": ".NET assembly (.dll/.exe)"
+          },
+          {
+            "name": "outdir",
+            "type": "dir",
+            "required": true,
+            "desc": "output dir for decompiled C#"
+          },
+          {
+            "name": "--format",
+            "type": "enum",
+            "required": false,
+            "desc": "text | json (default text)"
+          }
+        ],
+        "result": {
+          "channel": "stdout",
+          "format": "text|json",
+          "fields": {
+            "ok": "bool",
+            "tool": "string",
+            "outputDir": "string",
+            "filesWritten": "int",
+            "exitCode": "int"
+          }
+        }
+      },
+      "sha256": "dc05d4317f48b1865aa554f76e425c194bd2433c1c05ac70d07e7cae64a633ea"
+    },
+    {
+      "id": "pyc-decompile",
+      "name": "Python Bytecode Decompiler",
+      "version": "0.1.0",
+      "capabilities": [
+        "decompile-python-bytecode",
+        "decompile-pyc"
+      ],
+      "prerequisites": [
+        {
+          "tool": "python3",
+          "min_version": "3.8",
+          "check": [
+            "python3",
+            "--version"
+          ],
+          "install_hint": "Install Python 3.8+ to run the decompiler. The target .pyc can be a different version; decompyle3 targets 3.7-3.8 bytecode."
+        }
+      ],
+      "entry": {
+        "command": [
+          "python3",
+          "runtime/run.py"
+        ],
+        "args": [
+          {
+            "name": "input",
+            "type": "file",
+            "required": true,
+            "desc": "path to the .pyc / compiled bytecode"
+          },
+          {
+            "name": "outdir",
+            "type": "dir",
+            "required": true,
+            "desc": "output dir; writes decompiled.py"
+          }
+        ],
+        "result": {
+          "channel": "stdout",
+          "format": "json",
+          "fields": {
+            "ok": "bool",
+            "outputFile": "string",
+            "detectedVersion": "string|null",
+            "supported": "bool|null",
+            "bytesOut": "int"
+          }
+        }
+      },
+      "sha256": "7b5cf54e5d462035f325cb61813123b339b6f7f78989c97172b0367a8c334b37"
+    },
+    {
+      "id": "js-covert-scan",
+      "name": "JavaScript Covert-Tactics Scanner",
+      "version": "0.1.0",
+      "capabilities": [
+        "detect-js-steganography",
+        "detect-js-obfuscation-tactics",
+        "detect-js-evasion",
+        "emit-atoms"
+      ],
+      "prerequisites": [
+        {
+          "tool": "python3",
+          "min_version": "3.8",
+          "check": [
+            "python3",
+            "--version"
+          ],
+          "install_hint": "Install Python 3.8+ \u2014 pure stdlib, no other dependency."
+        }
+      ],
+      "entry": {
+        "command": [
+          "python3",
+          "runtime/scan.py"
+        ],
+        "args": [
+          {
+            "name": "input",
+            "type": "path",
+            "required": true,
+            "desc": "file OR directory of .js/.ts/.mjs/.cjs/.jsx/.tsx to scan"
+          },
+          {
+            "name": "--format",
+            "type": "enum",
+            "required": false,
+            "desc": "text | json (default text)"
+          }
+        ],
+        "result": {
+          "channel": "stdout",
+          "format": "text|json",
+          "fields": {
+            "ok": "bool",
+            "filesScanned": "int",
+            "findingCount": "int",
+            "summary": "object",
+            "families": "array",
+            "assessment": "string",
+            "findings": "array"
+          }
+        }
+      },
+      "sha256": "56c2de90e06f23616c19d1d7c19a4943525c1902ae6ddff96b5fdefd730e5c55"
+    },
+    {
+      "id": "py-covert-scan",
+      "name": "Python Covert-Tactics Scanner",
+      "version": "0.1.0",
+      "capabilities": [
+        "detect-py-obfuscation-tactics",
+        "detect-py-evasion",
+        "detect-steganography",
+        "emit-atoms"
+      ],
+      "prerequisites": [
+        {
+          "tool": "python3",
+          "min_version": "3.8",
+          "check": [
+            "python3",
+            "--version"
+          ],
+          "install_hint": "Install Python 3.8+ \u2014 pure stdlib, no other dependency."
+        }
+      ],
+      "entry": {
+        "command": [
+          "python3",
+          "runtime/scan.py"
+        ],
+        "args": [
+          {
+            "name": "input",
+            "type": "path",
+            "required": true,
+            "desc": "file OR directory of .py to scan"
+          },
+          {
+            "name": "--format",
+            "type": "enum",
+            "required": false,
+            "desc": "text | json (default text)"
+          }
+        ],
+        "result": {
+          "channel": "stdout",
+          "format": "text|json",
+          "fields": {
+            "ok": "bool",
+            "filesScanned": "int",
+            "findingCount": "int",
+            "summary": "object",
+            "families": "array",
+            "assessment": "string",
+            "findings": "array"
+          }
+        }
+      },
+      "sha256": "270b8ac9d4ddbaca585c4d184982725d5659254434f79e929eecedfe04862ca0"
+    },
+    {
+      "id": "secrets-scan",
+      "name": "Secrets Scanner",
+      "version": "0.1.0",
+      "capabilities": [
+        "scan-secrets",
+        "detect-credentials",
+        "emit-atoms"
+      ],
+      "prerequisites": [
+        {
+          "tool": "python3",
+          "min_version": "3.8",
+          "check": [
+            "python3",
+            "--version"
+          ],
+          "install_hint": "Install Python 3.8+ \u2014 pure stdlib, no other dependency."
+        }
+      ],
+      "entry": {
+        "command": [
+          "python3",
+          "runtime/scan.py"
+        ],
+        "args": [
+          {
+            "name": "input",
+            "type": "path",
+            "required": true,
+            "desc": "file OR directory to scan"
+          },
+          {
+            "name": "--format",
+            "type": "enum",
+            "required": false,
+            "desc": "text | json (default text)"
+          },
+          {
+            "name": "--min-entropy",
+            "type": "float",
+            "required": false,
+            "desc": "entropy gate for generic assignments (default 3.2)"
+          }
+        ],
+        "result": {
+          "channel": "stdout",
+          "format": "text|json",
+          "fields": {
+            "ok": "bool",
+            "filesScanned": "int",
+            "findingCount": "int",
+            "summary": "object",
+            "findings": "array"
+          }
+        }
+      },
+      "sha256": "3c2f4a65b2f60983e301d81c47e31165cb123f623d34453c97c2f19b0db7687b"
+    }
+  ]
+}

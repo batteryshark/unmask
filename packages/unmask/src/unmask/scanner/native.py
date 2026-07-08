@@ -41,6 +41,13 @@ class NativeScanner:
 
     def compose_assess_render(self, observations, inv, target: str) -> ScanResult:
         findings = compose_mcd(observations, inv)
+        # Contextual attenuation is an interpretation layer OVER judgment-free
+        # composition: documented installer idioms (curl … astral.sh/uv/install.sh | sh)
+        # and CI/Dockerfile contexts attenuate confidence so a benign repo doesn't
+        # auto-quarantine. Runs here (not inside compose_mcd) so the compose oracle
+        # stays judgment-free and the parity tests pin the unattenuated shape.
+        from unmask.scanner.compose.attenuators import apply_contextual_attenuators
+        apply_contextual_attenuators(findings, observations, inv=inv)
         assessment = build_assessment(findings, observations, inv, target)
         rendered = {
             "html": render_html(assessment),

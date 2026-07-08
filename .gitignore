@@ -23,3 +23,6 @@ dist/
 
 # Agent worktrees (temporary; separate git repos)
 .claude/worktrees/
+
+# Transitional vendored old engine — the scanner is native; not tracked.
+packages/unmask/src/unmask/_vendor/

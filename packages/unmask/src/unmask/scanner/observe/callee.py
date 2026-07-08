@@ -186,6 +186,42 @@ def extract_calls(src: str, lang: str) -> list[tuple[str, int]]:
     return ast if ast is not None else extract_calls_regex(src, lang)
 
 
+# Languages where the bare callee ``exec`` / ``execSync`` is ambiguous: it could
+# be ``child_process.exec`` (EXEC.SHELL) or ``RegExp.prototype.exec`` (regex
+# matching — the most common method call in any JS codebase). The taxonomy gates
+# these behind a file-scope ``child_process`` text requirement (see
+# ``gate.exec.shell.javascript.child-process`` in source-callees.yaml); this
+# constant is the engine-side enforcement of that gate.
+_JS_EXEC_GATE_LANGS = frozenset({"javascript", "typescript", "tsx"})
+_CHILD_PROCESS_MARKER = "child_process"
+
+
+def _js_exec_gate(callee: str, text: str, lang: str, atom: str) -> bool:
+    """Return True if a JS/TS EXEC.SHELL callee should be DROPPED.
+
+    The bare callee ``exec`` / ``execSync`` matches ``child_process.exec`` AND
+    ``RegExp.prototype.exec``. The taxonomy gate requires file-scope evidence of
+    ``child_process`` (an import/require) before accepting the ambiguous callee as
+    EXEC.SHELL. Without that evidence the call is almost certainly a regex match.
+    Explicitly-qualified callees (``child_process.exec``, ``cp.exec``) are never
+    gated — the qualification IS the evidence.
+    """
+    if lang not in _JS_EXEC_GATE_LANGS:
+        return False
+    if atom != "EXEC.SHELL":
+        return False
+    # Only the ambiguous bare/suffixed forms need gating.
+    base = callee.replace("::", ".").replace("->", ".").lower()
+    # Explicitly qualified → not ambiguous, keep it.
+    if any(q in base for q in ("child_process", "cp.", "require(")):
+        return False
+    if not (base == "exec" or base == "execsync" or base.endswith(".exec")
+            or base.endswith(".execsync")):
+        return False
+    # Gate: does this file reference child_process anywhere?
+    return _CHILD_PROCESS_MARKER not in text
+
+
 def observe_callee(inv: Inventory, sigs: Signatures | None = None) -> list[Observation]:
     from pathlib import Path
     sigs = sigs or Signatures.load_vendored()
@@ -201,6 +237,11 @@ def observe_callee(inv: Inventory, sigs: Signatures | None = None) -> list[Obser
         for callee, line in extract_calls(text, f.language):
             hit = sigs.classify_callee(callee, f.language)
             if hit is None:
+                continue
+            # Taxonomy gate: drop ambiguous JS .exec callees without child_process
+            # evidence (RegExp.exec false positives — the single biggest FP source
+            # in minified JS bundles).
+            if _js_exec_gate(callee, text, f.language, hit.atom):
                 continue
             out.append(Observation(
                 atom=hit.atom, confidence=hit.confidence, method=method,
