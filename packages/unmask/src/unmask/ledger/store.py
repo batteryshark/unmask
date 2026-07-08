@@ -223,25 +223,26 @@ class LedgerStore:
         cur = self.conn.execute("select count(*) c from findings where run_id=?", (run_id,))
         return cur.fetchone()["c"]
 
+    def _delete_run_rows(self, run_id: str, *tables: str) -> None:
+        for table in tables:  # table names are internal constants, never user input
+            self.conn.execute(f"delete from {table} where run_id=?", (run_id,))
+        self.conn.commit()
+
     def reset_observations(self, run_id: str) -> None:
         """Drop this run's observations so the post-transform union can be re-recorded
         without stale rows (finding/observation ids are renumbered over the union)."""
-        self.conn.execute("delete from observations where run_id=?", (run_id,))
-        self.conn.commit()
+        self._delete_run_rows(run_id, "observations")
 
     def reset_findings(self, run_id: str) -> None:
-        self.conn.execute("delete from findings where run_id=?", (run_id,))
-        self.conn.commit()
+        self._delete_run_rows(run_id, "findings")
 
     def reset_run_derived(self, run_id: str) -> None:
         """Clear everything a re-drive regenerates, keeping the run row itself. Resume
         starts from a clean slate so nodes re-record without duplicating; anything
         worth reusing (fetched bytes, decompiled trees) lives on disk, not in these
         tables."""
-        for table in ("artifacts", "observations", "findings", "work_items",
-                      "graph_events", "judgments", "qa_suggestions", "reports"):
-            self.conn.execute(f"delete from {table} where run_id=?", (run_id,))
-        self.conn.commit()
+        self._delete_run_rows(run_id, "artifacts", "observations", "findings", "work_items",
+                              "graph_events", "judgments", "qa_suggestions", "reports")
 
     # --- judgments (agentic review) --------------------------------------
     def record_judgment(self, run_id: str, review, *, reviewer="agentic", model=None) -> str:

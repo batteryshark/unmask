@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import re
+from functools import lru_cache
 from pathlib import Path
 
 from unmask.scanner.signatures.matcher import compile_flags
@@ -113,15 +114,10 @@ class Signatures:
 
     @classmethod
     def load_vendored(cls, packs_dir: Path | None = None) -> "Signatures":
-        packs_dir = packs_dir or vendored_packs_dir()
-        loaded: dict[str, SignaturePack] = {}
-        for name, fname in _VENDORED_PACKS.items():
-            fp = packs_dir / fname
-            if fp.is_file():
-                loaded[name] = load_pack(fp)
-        if "callee" not in loaded:
-            raise SignaturePackError(f"no callee pack under {packs_dir}")
-        return cls(loaded)
+        """Load the vendored packs. Cached (packs are read-only and re-parsing +
+        recompiling ~100 regexes on every scan node — observe, transform, fetch — is
+        pure waste); the returned facade is safe to share."""
+        return _load_vendored_cached(str(packs_dir) if packs_dir is not None else None)
 
     @property
     def callee_rules(self) -> tuple[MatchRule, ...]:
@@ -165,3 +161,16 @@ class Signatures:
             for matched, start in content_matches(text, rule):
                 hits.append(Hit(rule.atom, rule.confidence, rule.summary, rule.id, text=matched, start=start))
         return hits
+
+
+@lru_cache(maxsize=8)
+def _load_vendored_cached(packs_dir_str: str | None) -> "Signatures":
+    packs_dir = Path(packs_dir_str) if packs_dir_str is not None else vendored_packs_dir()
+    loaded: dict[str, SignaturePack] = {}
+    for name, fname in _VENDORED_PACKS.items():
+        fp = packs_dir / fname
+        if fp.is_file():
+            loaded[name] = load_pack(fp)
+    if "callee" not in loaded:
+        raise SignaturePackError(f"no callee pack under {packs_dir}")
+    return Signatures(loaded)

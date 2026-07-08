@@ -682,28 +682,26 @@ def _run_transform_fixpoint(all_obs, inv, pending_binaries, providers, caps,
     return all_obs
 
 
-def _work_id_for(ctx: _Ctx, operation: str, target: str) -> str | None:
-    row = ctx.deps.ledger.conn.execute(
-        "select id from work_items where run_id=? and operation=? and target=? "
-        "order by created_at limit 1", (ctx.state.run_id, operation, target)).fetchone()
-    return row["id"] if row else None
-
-
-def _work_id_for_op(ctx: _Ctx, operation: str) -> str | None:
-    row = ctx.deps.ledger.conn.execute(
-        "select id from work_items where run_id=? and operation=? order by created_at limit 1",
-        (ctx.state.run_id, operation)).fetchone()
+def _work_id_for(ctx: _Ctx, operation: str, target: str | None = None) -> str | None:
+    """Oldest work item for this run + operation, optionally narrowed to a target."""
+    sql = "select id from work_items where run_id=? and operation=?"
+    params: list = [ctx.state.run_id, operation]
+    if target is not None:
+        sql += " and target=?"
+        params.append(target)
+    sql += " order by created_at limit 1"
+    row = ctx.deps.ledger.conn.execute(sql, params).fetchone()
     return row["id"] if row else None
 
 
 def _mark_op_done(ctx: _Ctx, operation: str) -> None:
-    wid = _work_id_for_op(ctx, operation)
+    wid = _work_id_for(ctx, operation)
     if wid:
         ctx.deps.ledger.set_work_status(wid, "done")
 
 
 def _fail_op(ctx: _Ctx, operation: str, error: str) -> None:
-    wid = _work_id_for_op(ctx, operation)
+    wid = _work_id_for(ctx, operation)
     if wid:
         ctx.deps.ledger.set_work_status(wid, "failed", error=error)
 
