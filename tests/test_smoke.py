@@ -1,8 +1,8 @@
 """End-to-end smoke test over the bundled evil-npm fixture.
 
-The scanner (engine + mcd_lens) and taxonomy signatures are vendored into the
-wheel, so this resolves with nothing set — no UNMASK_SCANNER_ROOT, no sibling
-parallax-goalpacks/parallax-taxonomy checkout. The test runs by default.
+The native scanner and taxonomy signatures are vendored into the wheel, so this
+resolves with nothing set — no sibling parallax-taxonomy checkout. The test runs
+by default.
 """
 
 from __future__ import annotations

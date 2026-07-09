@@ -25,10 +25,9 @@ mcd tree ./suspicious-package
 mcd report --run-id <id> --format html
 ```
 
-The deterministic scanner (parallax `engine` + `mcd_lens`) and its taxonomy
-signature data are **vendored into this wheel** (`unmask/_vendor/` and
-`unmask/taxonomy/vendored/`), so it runs self-contained with no external
-`parallax-goalpacks` / `parallax-taxonomy` checkout. `$UNMASK_SCANNER_ROOT`
-is only a dev override for working against a live checkout.
+The deterministic scanner is native to this package (`unmask/scanner/`) and its
+taxonomy signature data is **vendored into this wheel**
+(`unmask/taxonomy/vendored/`), so it runs self-contained with no external
+`parallax-taxonomy` checkout.
 
 The CLI command is `mcd`; the import package is `unmask`.
