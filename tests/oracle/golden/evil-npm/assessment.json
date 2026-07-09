@@ -653,6 +653,6 @@
     "ecosystems": [
       "npm"
     ],
-    "path": "/Users/batteryshark/Downloads/runner-lab/mcd/tests/fixtures/evil-npm"
+    "path": "tests/fixtures/evil-npm"
   }
 }

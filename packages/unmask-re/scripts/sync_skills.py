@@ -122,7 +122,9 @@ def sync(rekit_root: Path, dest: Path) -> dict:
         print(f"  + {sid}: {len(list(dst.rglob('*')))} files")
     return {
         "schemaVersion": "0.1.0",
-        "sourceRoot": str(rekit_root.resolve()),
+        # Provenance label only (never read at run time) — keep it a name, not an
+        # absolute machine path, so the committed manifest doesn't leak local paths.
+        "sourceRoot": rekit_root.name,
         "skills": records,
     }
 
