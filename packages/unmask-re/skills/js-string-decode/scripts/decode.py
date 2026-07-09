@@ -379,13 +379,17 @@ def run(path: str, outdir: str | None, max_bytes: int) -> dict:
                 fh.write("/* key=%d %s off=%d */ %s\n" % (key, mode, off, lit))
 
     # Emit an atom per decode site so the recovered plaintext SURFACES as evidence in a
-    # finding (BP-OBFUSCATION composes OBF.XOR) — not just written to decoded-strings.js.
+    # finding — not just written to decoded-strings.js. The emitted atom is the real
+    # judgment-free parallax atom XFRM.BITWISE (constant-key XOR is a bitwise transform),
+    # tagged method="covert-scan" so the consumer's lens makes the obfuscation judgment
+    # by provenance. The recovered plaintext stays in the note as evidence.
     # No file/line: the ingest prefixes the artifact's origin (logical) path.
     atoms = []
     for key, off, mode, decoded, how in results[:50]:
         sample = decoded[:200] + ("…" if len(decoded) > 200 else "")
         atoms.append({
-            "atom": "OBF.XOR", "confidence": 0.85,
+            "atom": "XFRM.BITWISE", "family": "XFRM", "confidence": 0.85,
+            "method": "covert-scan",
             "note": "recovered concealed string via constant-key XOR (key=%d): %s" % (key, sample),
         })
 

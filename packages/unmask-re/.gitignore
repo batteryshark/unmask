@@ -1,6 +1,7 @@
-# Vendored skill runtimes are build artifacts — rebuilt via each skill's
+# Vendored skill deps are build artifacts — rebuilt via each skill's
 # scripts/build.sh (webcrack node_modules incl. isolated-vm native addons;
-# pure-python decompiler site dirs). Source (skill.json, SKILL.md, runtime/*.py,
-# run.mjs, package.json, package-lock.json, build.sh, *.version) is tracked.
-skills/*/runtime/node_modules/
-skills/*/runtime/site/
+# pure-python decompiler site dirs). Source (SKILL.md, scripts/*.py, run.mjs,
+# package.json, package-lock.json, build.sh, *.version) is tracked; the manifest
+# lives in rekit's registry.json + the generated skills-manifest.json.
+skills/*/scripts/node_modules/
+skills/*/scripts/site/

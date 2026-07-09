@@ -24,7 +24,7 @@
       "entry": {
         "command": [
           "python3",
-          "runtime/unpack.py"
+          "scripts/unpack.py"
         ],
         "args": [
           {
@@ -66,7 +66,7 @@
           }
         }
       },
-      "sha256": "f0fb8f9b3c6af89ceccb2194ab4788b798cadc229766960801272b4796b0dee1"
+      "sha256": "27d58aaa923637454e39c57d9053e77cc1db2322d6134f19e0f226aebb0ff16f"
     },
     {
       "id": "bin-triage",
@@ -94,7 +94,7 @@
       "entry": {
         "command": [
           "python3",
-          "runtime/triage.py"
+          "scripts/triage.py"
         ],
         "args": [
           {
@@ -142,7 +142,7 @@
           }
         }
       },
-      "sha256": "badee035aadadcb479a8a900e967713bb960d227a752f67870ce8b712dec0867"
+      "sha256": "e35371759e3330bbdef342b57b8283dff4ed6379bc56f97d37ace117821cb36a"
     },
     {
       "id": "js-deobfuscate",
@@ -167,7 +167,7 @@
       "entry": {
         "command": [
           "node",
-          "runtime/run.mjs"
+          "scripts/run.mjs"
         ],
         "args": [
           {
@@ -197,7 +197,7 @@
           }
         }
       },
-      "sha256": "183b3ffbd404f7e17e25f118d46a38550238226390692d08871f51e32ea3a23e"
+      "sha256": "9e0529701f4d55ca5852fdfb4255dab87e56176939db441f6e7ccb3015aa5814"
     },
     {
       "id": "jvm-decompile",
@@ -231,7 +231,7 @@
       "entry": {
         "command": [
           "python3",
-          "runtime/run.py"
+          "scripts/run.py"
         ],
         "args": [
           {
@@ -250,7 +250,11 @@
             "name": "--format",
             "type": "enum",
             "required": false,
-            "desc": "text | json (default text)"
+            "desc": "text | json (default text)",
+            "choices": [
+              "text",
+              "json"
+            ]
           }
         ],
         "result": {
@@ -265,7 +269,7 @@
           }
         }
       },
-      "sha256": "86919114b5c919ae460cd3d1a47bee6d00cbebc6631b9f75cdd8dbfc97b298dd"
+      "sha256": "fa9d8920967e61e10b82e59579fa953aa6bd8e3d2fdedc923db295ba63edb0d7"
     },
     {
       "id": "dotnet-decompile",
@@ -297,7 +301,7 @@
       "entry": {
         "command": [
           "python3",
-          "runtime/run.py"
+          "scripts/run.py"
         ],
         "args": [
           {
@@ -316,7 +320,11 @@
             "name": "--format",
             "type": "enum",
             "required": false,
-            "desc": "text | json (default text)"
+            "desc": "text | json (default text)",
+            "choices": [
+              "text",
+              "json"
+            ]
           }
         ],
         "result": {
@@ -331,7 +339,7 @@
           }
         }
       },
-      "sha256": "dc05d4317f48b1865aa554f76e425c194bd2433c1c05ac70d07e7cae64a633ea"
+      "sha256": "c99c05ca2a81eac550cd79bbb7091e5a9b732af3823fe466dbc4f4d847f4cc19"
     },
     {
       "id": "pyc-decompile",
@@ -355,7 +363,7 @@
       "entry": {
         "command": [
           "python3",
-          "runtime/run.py"
+          "scripts/run.py"
         ],
         "args": [
           {
@@ -383,7 +391,7 @@
           }
         }
       },
-      "sha256": "7b5cf54e5d462035f325cb61813123b339b6f7f78989c97172b0367a8c334b37"
+      "sha256": "1b14d88c9b838c1248d191d5f94251846d224f55a23bedc258a930e503359e7a"
     },
     {
       "id": "js-covert-scan",
@@ -409,7 +417,7 @@
       "entry": {
         "command": [
           "python3",
-          "runtime/scan.py"
+          "scripts/scan.py"
         ],
         "args": [
           {
@@ -422,7 +430,7 @@
             "name": "--format",
             "type": "enum",
             "required": false,
-            "desc": "text | json (default text)"
+            "desc": "text | json (default json)"
           }
         ],
         "result": {
@@ -439,7 +447,7 @@
           }
         }
       },
-      "sha256": "0848823c846dbd33eb19df64192a6cf0c2404e956df5b7787e93f4608d981438"
+      "sha256": "a7a91dbfa4420aba97fc703f2c8ab76e7854bfdd22acc2fb55af80d311ebbb5a"
     },
     {
       "id": "js-string-decode",
@@ -463,7 +471,7 @@
       "entry": {
         "command": [
           "python3",
-          "runtime/decode.py"
+          "scripts/decode.py"
         ],
         "args": [
           {
@@ -507,7 +515,7 @@
           }
         }
       },
-      "sha256": "da91e2926a27ab71c574a9edcaef88a4e893a2b6be833ddeec529ff0a03f35af"
+      "sha256": "b79f89c12b92309ce906bf4e2870300f0f9011c33c81113e8676ca572b1a9b3a"
     },
     {
       "id": "py-covert-scan",
@@ -533,7 +541,7 @@
       "entry": {
         "command": [
           "python3",
-          "runtime/scan.py"
+          "scripts/scan.py"
         ],
         "args": [
           {
@@ -546,7 +554,11 @@
             "name": "--format",
             "type": "enum",
             "required": false,
-            "desc": "text | json (default text)"
+            "desc": "text | json (default json)",
+            "choices": [
+              "text",
+              "json"
+            ]
           }
         ],
         "result": {
@@ -563,7 +575,7 @@
           }
         }
       },
-      "sha256": "270b8ac9d4ddbaca585c4d184982725d5659254434f79e929eecedfe04862ca0"
+      "sha256": "4f0e1d4e0b80ba172d4845183ae71f6eb1febe508eb884e3c1929c0662933de9"
     },
     {
       "id": "secrets-scan",
@@ -588,7 +600,7 @@
       "entry": {
         "command": [
           "python3",
-          "runtime/scan.py"
+          "scripts/scan.py"
         ],
         "args": [
           {
@@ -601,7 +613,11 @@
             "name": "--format",
             "type": "enum",
             "required": false,
-            "desc": "text | json (default text)"
+            "desc": "text | json (default text)",
+            "choices": [
+              "text",
+              "json"
+            ]
           },
           {
             "name": "--min-entropy",
@@ -622,7 +638,7 @@
           }
         }
       },
-      "sha256": "3c2f4a65b2f60983e301d81c47e31165cb123f623d34453c97c2f19b0db7687b"
+      "sha256": "574dbadad9f41318bfe048eb9f0ab671a581b4d0d1066b104a38ea97c9c9d9fe"
     }
   ]
 }

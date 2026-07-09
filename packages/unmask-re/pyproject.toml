@@ -13,6 +13,8 @@ authors = [{ name = "Mario Mercaldi" }]
 
 # Heavy deps live here, not in core. Kept minimal in the stub; real providers add
 # lief/capstone/unicorn and manage external tools (jadx/ghidra/ilspy) out of band.
+# Everything (vendoring + runtime) reads plain JSON — rekit's registry.json at sync
+# time, the generated skills-manifest.json at run time — so no YAML parser is needed.
 dependencies = ["unmask"]
 
 # Registering here is what makes core's ResolveToolchain see RE capabilities.
@@ -27,7 +29,6 @@ packages = ["src/unmask_re"]
 # vendored decompyle3 site for pyc-decompile). Without these in the wheel the
 # provider has nothing to shell out to. Re-vendor with `scripts/sync_skills.py`.
 artifacts = [
-    "skills/**/skill.json",
     "skills/**/SKILL.md",
     "skills/**/*.py",
     "skills/**/*.mjs",

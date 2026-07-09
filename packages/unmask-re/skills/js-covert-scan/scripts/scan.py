@@ -52,6 +52,26 @@ ATOMS = {
     "EVADE.PROXY":     ("EVADE", 0.6, "proxy/env-conditional behavior"),
 }
 
+# Internal tactic id -> the REAL judgment-free parallax atom emitted downstream.
+# The ATOMS ids above stay as internal identifiers (they carry the per-tactic
+# confidence + human note); at emission we translate to the parallax atom and tag
+# method="covert-scan" so the consumer's lens re-derives the obfuscation/evasion
+# judgment by provenance. Several tactics collapse onto one atom (e.g. all STEGO.*
+# -> XFRM.UNICODE) — the per-tactic `note` keeps them distinct as evidence.
+TACTIC_TO_ATOM = {
+    "STEGO.INVISIBLE": "XFRM.UNICODE",
+    "STEGO.BIDI":      "XFRM.UNICODE",
+    "STEGO.HOMOGLYPH": "XFRM.UNICODE",
+    "OBF.XOR":         "XFRM.BITWISE",
+    "OBF.CHARCODE":    "XFRM.ENCODE",
+    "OBF.ESCAPE":      "XFRM.ENCODE",
+    "OBF.DYNEVAL":     "LOAD.EVAL",
+    "EVADE.TIMEZONE":  "ENVI.ENVCHECK",
+    "EVADE.LOCALE":    "ENVI.ENVCHECK",
+    "EVADE.GEO":       "ENVI.ENVCHECK",
+    "EVADE.PROXY":     "ENVI.ENVCHECK",
+}
+
 # Confusable punctuation/space/dash that stands in for an ASCII character. Heavily
 # abused for steganography (the exact apostrophe variants in the wild belong here).
 _CONFUSABLE = {
@@ -93,9 +113,14 @@ _REGEXES = [
 
 
 def _finding(atom, path, line_no, col, snippet, extra=None):
-    fam, conf, note = ATOMS[atom]
-    f = {"atom": atom, "family": fam, "confidence": conf, "file": path,
-         "line": line_no, "col": col, "note": note, "snippet": snippet[:160]}
+    # `atom` is the internal tactic id; look up its confidence + note, but emit the
+    # real parallax atom/family and tag the provenance so the consumer can judge.
+    _fam, conf, note = ATOMS[atom]
+    real = TACTIC_TO_ATOM[atom]
+    fam = real.split(".", 1)[0]
+    f = {"atom": real, "family": fam, "confidence": conf, "file": path,
+         "line": line_no, "col": col, "note": note, "snippet": snippet[:160],
+         "method": "covert-scan"}
     if extra:
         f.update(extra)
     return f
