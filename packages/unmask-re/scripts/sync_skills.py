@@ -44,6 +44,7 @@ ALLOWED_SKILLS = (
     "dotnet-decompile",      # BYO ilspycmd: .NET assembly -> C#
     "pyc-decompile",         # vendored decompyle3: .pyc -> py
     "js-covert-scan",        # pure stdlib emit-atoms: stego/obf/evasion in JS
+    "js-string-decode",      # pure stdlib: static constant-key XOR/charCode string decode
     "py-covert-scan",        # pure stdlib emit-atoms: stego/obf/evasion in Python
     "secrets-scan",          # pure stdlib emit-atoms: leaked credentials
 )

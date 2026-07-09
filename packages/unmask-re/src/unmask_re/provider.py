@@ -61,6 +61,8 @@ _CAP_TO_SKILL: dict[str, str] = {
     # deobfuscation
     "deobfuscate-js": "js-deobfuscate", "deobfuscate": "js-deobfuscate",
     "unpack-js-bundle": "js-deobfuscate", "unminify-js": "js-deobfuscate",
+    # static string decoding (constant-key XOR/charCode; zero-execution complement to deobfuscate)
+    "decode-strings": "js-string-decode", "xor-decode": "js-string-decode",
     # decompilation
     "decompile-jvm": "jvm-decompile", "decompile-apk": "jvm-decompile",
     "decompile-dex": "jvm-decompile", "decompile-jar": "jvm-decompile",
@@ -218,7 +220,7 @@ def _coerce_atoms(obj: dict, origin: str) -> list[EmittedAtom]:
             method=str(a.get("method") or "skill-emit"),
             path=str(a.get("path") or a.get("file") or origin),
             line=a.get("line"),
-            evidence=a.get("evidence") or a.get("matched") or a.get("snippet"),
+            evidence=a.get("evidence") or a.get("matched") or a.get("snippet") or a.get("note"),
             rule_id=a.get("rule_id") or a.get("ruleId") or a.get("id"),
             summary=a.get("summary"),
         ))
@@ -261,17 +263,32 @@ class SkillTransformProvider:
         return False
 
     def transform(self, artifact: ArtifactRef, workdir: str) -> TransformResult | dict:
-        cap = self._select_capability(artifact)
-        if cap is None:
+        caps = [c for c in _kind_to_caps(artifact.kind)
+                if c in self.capabilities and _skill_for(c) is not None]
+        if not caps:
             return TransformResult.failed(
                 self.id, artifact.logical_path, "(none)",
                 f"no skill/capability for artifact kind {artifact.kind!r}")
-        sk = _skill_for(cap)
-        if sk is None:
-            return TransformResult.failed(
-                self.id, artifact.logical_path, cap,
-                f"skill for {cap!r} missing or prerequisites unmet")
-        return self._run_skill(sk, artifact, cap, workdir)
+        # Obfuscated source runs ALL applicable passes (deobfuscate + tactics-scan +
+        # unminify) and merges their derived source and atoms; every other kind runs the
+        # single best skill. Each pass writes to its own subdir so outputs never collide.
+        run = caps if artifact.kind == "obfuscated-source" else caps[:1]
+        results = [self._run_skill(_skill_for(c), artifact, c,
+                                   os.path.join(workdir, f"c{i}-{c}"))
+                   for i, c in enumerate(run)]
+        if len(results) == 1:
+            return results[0]
+        derived, atoms, notes = [], [], []
+        for r in results:
+            derived += list(r.derived)
+            atoms += list(r.atoms)
+            if r.error:
+                notes.append(f"{r.capability}: {r.error}")
+            elif r.note:
+                notes.append(r.note)
+        return TransformResult(provider_id=self.id, artifact=artifact.logical_path,
+                               capability=run[0], derived=derived, atoms=atoms,
+                               note="; ".join(notes) or None)
 
     # -- internals -----------------------------------------------------------------
 
@@ -359,7 +376,15 @@ def _kind_to_caps(kind: str) -> tuple[str, ...]:
     best-first. Mirrors the planner's _KIND_CAPS so can_handle()/transform() pick
     the same skill the planner requested."""
     return {
-        "obfuscated-source": ("deobfuscate-js", "deobfuscate"),
+        # Obfuscated JS/TS runs several applicable passes (see transform), each fast except
+        # deobfuscate: statically decode constant-key XOR/charCode strings so the concealed
+        # payload (URLs, targeting lists, timezone gates) becomes plaintext the scanner reads
+        # (decode-strings); recover + prettify the source (deobfuscate-js — webcrack already
+        # unminifies, so a separate unminify-js pass is redundant + a 2nd slow webcrack run);
+        # and name the concealment/evasion tactics as OBF/EVADE/STEGO atoms
+        # (detect-js-obfuscation-tactics, a fast pure-python scan).
+        "obfuscated-source": ("decode-strings", "deobfuscate-js",
+                              "detect-js-obfuscation-tactics", "deobfuscate"),
         # `triage-binary` is the real bin-triage capability (was mis-named `binary-triage`,
         # which no skill advertises, so native binaries fell through to an honest blind spot
         # even though format-agnostic triage was available).

@@ -439,7 +439,75 @@
           }
         }
       },
-      "sha256": "56c2de90e06f23616c19d1d7c19a4943525c1902ae6ddff96b5fdefd730e5c55"
+      "sha256": "0848823c846dbd33eb19df64192a6cf0c2404e956df5b7787e93f4608d981438"
+    },
+    {
+      "id": "js-string-decode",
+      "name": "JavaScript Constant-Key String Decoder",
+      "version": "0.1.0",
+      "capabilities": [
+        "decode-strings",
+        "xor-decode"
+      ],
+      "prerequisites": [
+        {
+          "tool": "python3",
+          "min_version": "3.8",
+          "check": [
+            "python3",
+            "--version"
+          ],
+          "install_hint": "Install Python 3.8+ \u2014 pure stdlib (re, base64, mmap), no other dependency."
+        }
+      ],
+      "entry": {
+        "command": [
+          "python3",
+          "runtime/decode.py"
+        ],
+        "args": [
+          {
+            "name": "input",
+            "type": "file",
+            "required": true,
+            "desc": "JavaScript/TypeScript file to decode"
+          },
+          {
+            "name": "outdir",
+            "type": "dir",
+            "required": false,
+            "desc": "if given, write recovered plaintext to <outdir>/decoded-strings.js for rescanning"
+          },
+          {
+            "name": "--format",
+            "type": "enum",
+            "required": false,
+            "desc": "json | text (default json \u2014 the machine result the RE provider consumes)",
+            "choices": [
+              "json",
+              "text"
+            ]
+          },
+          {
+            "name": "--max-bytes",
+            "type": "int",
+            "required": false,
+            "desc": "cap on bytes read from the input (default 64 MiB)"
+          }
+        ],
+        "result": {
+          "channel": "stdout",
+          "format": "json",
+          "fields": {
+            "ok": "bool",
+            "outputDir": "string|null",
+            "decoded": "array of {key:int, count:int, sample:string} (grouped by key)",
+            "siteCount": "int",
+            "error": "string (only when ok=false)"
+          }
+        }
+      },
+      "sha256": "da91e2926a27ab71c574a9edcaef88a4e893a2b6be833ddeec529ff0a03f35af"
     },
     {
       "id": "py-covert-scan",

@@ -136,10 +136,13 @@ class Signatures:
         """Atom family prefixes (the part before the dot). Ingestion validates by
         family, not exact atom, so a skill may emit a newer subtype in a known
         family (e.g. a future ``XFRM.*``) without core gatekeeping it — but a
-        garbage family is rejected. ``AITM`` is always included: prompt-injection
-        atoms are emitted by the manifest/content passes, not only the packs."""
+        garbage family is rejected. Some families are emitted by passes/RE skills, not
+        the core packs, and are whitelisted here the same way: ``AITM`` (prompt-injection,
+        from the manifest/content passes) and ``OBF``/``EVADE``/``STEGO`` (obfuscation
+        tactics, environment-keyed evasion, steganography — from the js/py covert-scan
+        skills)."""
         fams = {a.split(".", 1)[0] for a in self.known_atoms()}
-        fams.add("AITM")
+        fams.update({"AITM", "OBF", "EVADE", "STEGO"})
         return frozenset(fams)
 
     def classify_callee(self, callee: str, lang: str) -> Hit | None:

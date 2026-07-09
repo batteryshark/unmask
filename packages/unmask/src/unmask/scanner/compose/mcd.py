@@ -279,42 +279,82 @@ def mcd(obs, inv=None) -> list:
     # an eval sink (that's BP-OBFEXEC). Fires on strong concealment atoms only (string/
     # charcode encoding, control-flow flattening, packing, steganographic characters);
     # plain minification (XFRM.RENAME) and a lone base64 (XFRM.ENCODE) do NOT qualify.
-    _obf_roots: set = set()
+    # Aggregate concealment atoms per top-level artifact: a carved/unpacked bundle explodes
+    # into many members, but "this component is obfuscated" is ONE concern. OBF.*/STEGO.*
+    # (which carry decoded/recovered payload as evidence) are cited FIRST so the finding
+    # shows what the concealment was hiding, not just that concealment exists.
+    _obf_by_root: dict = {}
     for path, group in groups.items():
         conceal = _has(group, "XFRM.STRCON", "XFRM.CTRLFLOW", "XFRM.PACK", "XFRM.STEG",
                        "OBF.XOR", "OBF.CHARCODE", "OBF.ESCAPE",
                        "STEGO.BIDI", "STEGO.HOMOGLYPH", "STEGO.INVISIBLE")
-        # One obfuscation finding per top-level artifact: a carved/unpacked bundle explodes
-        # into many members, but "this component is obfuscated" is one concern, not N.
+        if conceal:
+            _obf_by_root.setdefault(path.split("!", 1)[0], []).extend(conceal)
+    for root in _obf_by_root:
+        conceal = sorted(_obf_by_root[root],
+                         key=lambda o: 0 if o.atom.startswith(("OBF", "STEGO")) else 1)
+        n += 1
+        kinds = ", ".join(sorted({o.atom for o in conceal}))
+        findings.append(_finding(
+            f"mcd-{n}", "mcd", "Code obfuscation (deliberate concealment)",
+            "The code hides what it does — string/charcode encoding, control-flow "
+            "flattening, packing, or steganographic characters. Benign code has no reason "
+            "to conceal its behavior, so in a component you are vetting this is a strong "
+            f"red flag on its own, before any payload is decoded. Concealment: {kinds}.",
+            "high", 0.7, _ids(_uniq(conceal, 12)),
+            disproof=[
+                "The 'obfuscation' is ordinary minification (short names / whitespace) with "
+                "no string/charcode encoding, control-flow flattening, or hidden characters.",
+                "The encoding is a documented, benign transform (source map, bundled asset) "
+                "over trusted in-repo content.",
+            ],
+            verification=[
+                {"question": "Deobfuscate/decode the concealed content — what does it reveal?",
+                 "method": "static-source", "reason": "Concealment exists to hide something; reveal it."},
+                {"question": "Is any decoded value an indicator — URL, host, path, command, or an "
+                             "environment gate (timezone/locale/geo)?",
+                 "method": "static-source", "reason": "Concealed IOCs and env-gates are the payload."},
+            ],
+            response={"tier": 3, "summary": "Deobfuscate and review before trusting this component.",
+                      "actions": ["Decode/deobfuscate the concealed content",
+                                  "Treat as untrusted until the payload is understood"]},
+            composition="BP-OBFUSCATION",
+        ))
+
+    # BP-EVASION: behavior gated on the RUNTIME ENVIRONMENT — timezone, locale, geo, proxy.
+    # Environment-keyed conditional behavior is anti-analysis (stay dormant in a sandbox) or
+    # victim-targeting (fire only for specific regions). Benign software has no reason to
+    # hide behind the analyst's environment. (Atoms come from the js/py covert-scan skills.)
+    _evade_roots: set = set()
+    for path, group in groups.items():
+        evade = _has(group, "EVADE.TIMEZONE", "EVADE.LOCALE", "EVADE.GEO", "EVADE.PROXY")
         root = path.split("!", 1)[0]
-        if conceal and root not in _obf_roots:
-            _obf_roots.add(root)
+        if evade and root not in _evade_roots:
+            _evade_roots.add(root)
             n += 1
-            kinds = ", ".join(sorted({o.atom for o in conceal}))
+            kinds = ", ".join(sorted({o.atom.split(".", 1)[1].lower() for o in evade}))
             findings.append(_finding(
-                f"mcd-{n}", "mcd", "Code obfuscation (deliberate concealment)",
-                "The code hides what it does — string/charcode encoding, control-flow "
-                "flattening, packing, or steganographic characters. Benign code has no reason "
-                "to conceal its behavior, so in a component you are vetting this is a strong "
-                f"red flag on its own, before any payload is decoded. Concealment: {kinds}.",
-                "high", 0.7, _ids(_uniq(conceal, 12)),
+                f"mcd-{n}", "mcd", "Environment-keyed evasion / targeting",
+                f"The code changes what it does based on the runtime environment ({kinds}) — "
+                "it behaves differently depending on the analyst's timezone, locale, region, "
+                "or proxy. That is anti-analysis (stay dormant in a sandbox) or victim-"
+                "targeting (fire only for specific victims); benign software has no reason to "
+                "hide behind the environment.",
+                "high", 0.62, _ids(_uniq(evade, 12)),
                 disproof=[
-                    "The 'obfuscation' is ordinary minification (short names / whitespace) with "
-                    "no string/charcode encoding, control-flow flattening, or hidden characters.",
-                    "The encoding is a documented, benign transform (source map, bundled asset) "
-                    "over trusted in-repo content.",
+                    "The environment check is a documented, benign feature (localized "
+                    "formatting, a region-specific endpoint) with no gated payload behind it.",
                 ],
                 verification=[
-                    {"question": "Deobfuscate/decode the concealed content — what does it reveal?",
-                     "method": "static-source", "reason": "Concealment exists to hide something; reveal it."},
-                    {"question": "Is any decoded value an indicator — URL, host, path, command, or an "
-                                 "environment gate (timezone/locale/geo)?",
-                     "method": "static-source", "reason": "Concealed IOCs and env-gates are the payload."},
+                    {"question": "What behavior is gated behind the environment check — what "
+                                 "fires only for specific timezones/regions?",
+                     "method": "static-source", "reason": "The gated branch is where the payload hides."},
                 ],
-                response={"tier": 3, "summary": "Deobfuscate and review before trusting this component.",
-                          "actions": ["Decode/deobfuscate the concealed content",
-                                      "Treat as untrusted until the payload is understood"]},
-                composition="BP-OBFUSCATION",
+                response={"tier": 3,
+                          "summary": "Trace the gated branch — what runs only for the target environment.",
+                          "actions": ["Follow the environment-conditional branch to its payload",
+                                      "Treat as untrusted until the gated behavior is understood"]},
+                composition="BP-EVASION",
             ))
 
     # BP-BACKDOOR: command channel + execution, or embedded auth bypass material.
