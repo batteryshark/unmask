@@ -77,6 +77,7 @@
         "identify-format",
         "extract-strings",
         "detect-embedded",
+        "carve-embedded",
         "emit-atoms"
       ],
       "prerequisites": [
@@ -103,16 +104,26 @@
             "desc": "any file to triage"
           },
           {
+            "name": "outdir",
+            "type": "dir",
+            "required": false,
+            "desc": "if given, carve embedded readable-source regions here for rescanning"
+          },
+          {
             "name": "--format",
             "type": "enum",
             "required": false,
-            "desc": "text | json (default text)"
+            "desc": "text | json (default text)",
+            "choices": [
+              "text",
+              "json"
+            ]
           },
           {
             "name": "--max-bytes",
             "type": "int",
             "required": false,
-            "desc": "read cap (default 64 MiB)"
+            "desc": "atom-analysis read cap (default 64 MiB; carving always scans the whole file)"
           }
         ],
         "result": {
@@ -125,11 +136,13 @@
             "entropyFirstMiB": "number",
             "interestingStrings": "object",
             "embeddedSignatures": "array",
-            "atoms": "array"
+            "atoms": "array",
+            "carved": "array",
+            "outputDir": "string"
           }
         }
       },
-      "sha256": "a8bd3d62b228a5355ab25445f9ebb0ad3e5db50bb60372cf146c00f92af07d5b"
+      "sha256": "badee035aadadcb479a8a900e967713bb960d227a752f67870ce8b712dec0867"
     },
     {
       "id": "js-deobfuscate",

@@ -98,7 +98,10 @@ class InventoryTarget(BaseNode[MCDGraphState, MCDGraphDeps, dict]):
         binary_artifacts: list[ArtifactRef] = []
         for rel in tree.binary_paths:
             abspath = Path(s.target_path) / rel if Path(s.target_path).is_dir() else Path(s.target_path)
-            kind = classify_kind(Path(rel))
+            # Classify on the ABSOLUTE path: kind is magic-sniffed from bytes, so a bare
+            # relative label (e.g. an extensionless "claude") would sniff nothing and
+            # mis-fall to "other", starving the RE provider of the right capability.
+            kind = classify_kind(abspath)
             binary_artifacts.append(ArtifactRef(path=str(abspath), logical_path=rel, kind=kind))
             art_id = d.ledger.add_artifact(
                 run_id=s.run_id, kind=kind if kind in BINARY_KINDS else "native-binary",
