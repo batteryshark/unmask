@@ -9,6 +9,8 @@ severity/confidence separation, and correlation are preserved exactly.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from unmask.scanner.assess.common import (
     ASSESSMENT_VERSION, MCD_LENS, SCANNER, SCANNER_VERSION,
     _CONTRACT_NOTE, _IMPLEMENTATION_NOTE, _confidence_label, _max_confidence, _max_severity,
@@ -23,20 +25,71 @@ _OFFLINE_ENRICHMENT_NOTE = (
 )
 
 
-def _obs_to_dict(o) -> dict:
+_CONTEXT_LINES = 2          # code lines shown before/after the match (a 5-line window)
+_MAX_LINE_CHARS = 220       # long (minified) lines are windowed around the match, not dumped whole
+
+
+def _window_line(raw: str, col):
+    """Keep a match-line legible when the source is minified (one huge line): window it
+    to ~_MAX_LINE_CHARS around the match (or the start), remapping the match columns."""
+    if len(raw) <= _MAX_LINE_CHARS:
+        return raw, col
+    if col:
+        half = _MAX_LINE_CHARS // 2
+        s = max(0, col[0] - half)
+        e = min(len(raw), col[1] + half)
+        pre, suf = ("…" if s > 0 else ""), ("…" if e < len(raw) else "")
+        return pre + raw[s:e] + suf, [len(pre) + col[0] - s, len(pre) + col[1] - s]
+    return raw[:_MAX_LINE_CHARS] + "…", None
+
+
+def _snippet(abspath: str, line, match_text):
+    """A few lines of source context around a finding's location, with the matched span
+    located for highlighting. Best-effort: unreadable file / no line → None. Minified
+    lines are windowed so the snippet never dumps a 50KB line."""
+    if not abspath or not line or line < 1:
+        return None
+    try:
+        text = Path(abspath).read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return None
+    lines = text.splitlines()
+    if line > len(lines):
+        return None
+    lo, hi = max(1, line - _CONTEXT_LINES), min(len(lines), line + _CONTEXT_LINES)
+    out = []
+    for n in range(lo, hi + 1):
+        raw = lines[n - 1]
+        col = None
+        if n == line and match_text:
+            idx = raw.find(match_text)
+            if idx >= 0:
+                col = [idx, idx + len(match_text)]
+        txt, col = _window_line(raw, col)
+        out.append({"n": n, "text": txt, "match": n == line, "col": col})
+    return {"startLine": lo, "matchLine": line, "lines": out}
+
+
+def _obs_to_dict(o, file_map: dict) -> dict:
+    ev = {"summary": o.summary, "matchedText": o.evidence}
+    snip = _snippet(file_map.get(o.path), o.line, o.evidence)
+    if snip:
+        ev["snippet"] = snip
     return {
         "id": o.id,
         "atom": o.atom,
         "method": o.method,
         "confidence": o.confidence,
         "location": {"path": o.path, "line": o.line},
-        "evidence": {"summary": o.summary, "matchedText": o.evidence},
+        "evidence": ev,
         "relationships": list(o.relationships or []),
     }
 
 
 def build_assessment(findings, observations, inv, target_path: str) -> dict:
-    obs_dicts = [_obs_to_dict(o) for o in observations]
+    # logical rel → on-disk path, so evidence can carry a real code-context snippet.
+    file_map = {f.rel: f.path for f in getattr(inv, "files", [])}
+    obs_dicts = [_obs_to_dict(o, file_map) for o in observations]
     obs_by_id = {o["id"]: o for o in obs_dicts if o.get("id")}
 
     cited, seen = [], set()

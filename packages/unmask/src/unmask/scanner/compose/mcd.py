@@ -274,6 +274,49 @@ def mcd(obs, inv=None) -> list:
                 attenuators=atts or None,
             ))
 
+    # BP-OBFUSCATION: the code deliberately conceals itself. For a component whose trust
+    # you are questioning, obfuscation is a red flag ON ITS OWN — not only when paired with
+    # an eval sink (that's BP-OBFEXEC). Fires on strong concealment atoms only (string/
+    # charcode encoding, control-flow flattening, packing, steganographic characters);
+    # plain minification (XFRM.RENAME) and a lone base64 (XFRM.ENCODE) do NOT qualify.
+    _obf_roots: set = set()
+    for path, group in groups.items():
+        conceal = _has(group, "XFRM.STRCON", "XFRM.CTRLFLOW", "XFRM.PACK", "XFRM.STEG",
+                       "OBF.XOR", "OBF.CHARCODE", "OBF.ESCAPE",
+                       "STEGO.BIDI", "STEGO.HOMOGLYPH", "STEGO.INVISIBLE")
+        # One obfuscation finding per top-level artifact: a carved/unpacked bundle explodes
+        # into many members, but "this component is obfuscated" is one concern, not N.
+        root = path.split("!", 1)[0]
+        if conceal and root not in _obf_roots:
+            _obf_roots.add(root)
+            n += 1
+            kinds = ", ".join(sorted({o.atom for o in conceal}))
+            findings.append(_finding(
+                f"mcd-{n}", "mcd", "Code obfuscation (deliberate concealment)",
+                "The code hides what it does — string/charcode encoding, control-flow "
+                "flattening, packing, or steganographic characters. Benign code has no reason "
+                "to conceal its behavior, so in a component you are vetting this is a strong "
+                f"red flag on its own, before any payload is decoded. Concealment: {kinds}.",
+                "high", 0.7, _ids(_uniq(conceal, 12)),
+                disproof=[
+                    "The 'obfuscation' is ordinary minification (short names / whitespace) with "
+                    "no string/charcode encoding, control-flow flattening, or hidden characters.",
+                    "The encoding is a documented, benign transform (source map, bundled asset) "
+                    "over trusted in-repo content.",
+                ],
+                verification=[
+                    {"question": "Deobfuscate/decode the concealed content — what does it reveal?",
+                     "method": "static-source", "reason": "Concealment exists to hide something; reveal it."},
+                    {"question": "Is any decoded value an indicator — URL, host, path, command, or an "
+                                 "environment gate (timezone/locale/geo)?",
+                     "method": "static-source", "reason": "Concealed IOCs and env-gates are the payload."},
+                ],
+                response={"tier": 3, "summary": "Deobfuscate and review before trusting this component.",
+                          "actions": ["Decode/deobfuscate the concealed content",
+                                      "Treat as untrusted until the payload is understood"]},
+                composition="BP-OBFUSCATION",
+            ))
+
     # BP-BACKDOOR: command channel + execution, or embedded auth bypass material.
     for path, group in groups.items():
         listen = _has(group, "NETW.LISTEN")

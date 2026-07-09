@@ -45,6 +45,17 @@ def _confidence_pct(conf) -> str:
     return f"{round(conf * 100)}%"
 
 
+def _mark_span(text: str, col) -> str:
+    """Bracket the matched span with »…« so a plain code block still shows exactly what
+    fired (markdown can't colour a sub-span)."""
+    if not col:
+        return text
+    s, e = col
+    if 0 <= s <= e <= len(text):
+        return text[:s] + "»" + text[s:e] + "«" + text[e:]
+    return text
+
+
 # --- markdown --------------------------------------------------------------
 
 def render_markdown(assessment: dict) -> str:
@@ -105,11 +116,18 @@ def render_markdown(assessment: dict) -> str:
                     where = loc.get("path") or "?"
                     if loc.get("line"):
                         where += f":{loc['line']}"
-                    matched = (o.get("evidence") or {}).get("matchedText")
-                    line = f"- `{where}` — {(o.get('evidence') or {}).get('summary', '')}"
-                    if matched:
-                        line += f"  →  `{matched}`"
-                    out.append(line)
+                    evd = o.get("evidence") or {}
+                    out.append(f"- `{where}` — {evd.get('summary') or o.get('atom', '')}")
+                    snip = evd.get("snippet")
+                    if snip:  # code context: match line marked '>', matched span in »«
+                        out.append("")
+                        out.append("  ```")
+                        for ln in snip.get("lines", []):
+                            body = _mark_span(ln["text"], ln.get("col")) if ln.get("match") else ln["text"]
+                            out.append(f"  {'>' if ln.get('match') else ' '} {ln['n']:>6} | {body}")
+                        out.append("  ```")
+                    elif evd.get("matchedText"):
+                        out[-1] += f"  →  `{evd['matchedText']}`"
             out.append("")
 
     corrs = assessment.get("correlations") or []
