@@ -43,7 +43,10 @@ _DEOBF_BY_LANG: dict[str, tuple[str, ...]] = {
     "typescript": ("deobfuscate-js", "deobfuscate"),
 }
 _DEOBF_DEFAULT = ("deobfuscate",)
-_TRIAGE_FALLBACKS = ("binary-triage", "emit-atoms")
+# Universal binary fallback when no decompiler/unpacker fits: full format-agnostic triage
+# (identify + strings + embedded-detect + atoms), else atoms-only. `triage-binary` is the
+# real provider capability; `binary-triage` is kept as an alias for older providers.
+_TRIAGE_FALLBACKS = ("triage-binary", "binary-triage", "emit-atoms")
 
 
 @dataclass(frozen=True)

@@ -4,9 +4,11 @@ Internal generator (no dependency on the external `tree` command). High-volume
 directories are collapsed unless explicitly expanded, and output is capped by
 depth and entry count so a tree never bloats a report or a prompt.
 
-Kind classification is intentionally shallow (extension-based): it exists so the
-graph can spot binary artifacts and route them through the RE plugin boundary,
-not to replace the scanner's own inventory.
+Kind classification is shallow — extension first, with a content-magic sniff for the
+binaries a filename doesn't advertise (an extensionless executable like a Bun/pkg
+single-file CLI, or a binary hiding under a benign suffix). It exists so the graph can
+spot binary artifacts and route them through the RE plugin boundary, not to replace the
+scanner's own inventory.
 """
 
 from __future__ import annotations
@@ -36,12 +38,46 @@ _NATIVE_EXT = {".so", ".dylib", ".dll", ".o", ".a", ".bin", ".elf", ".exe"}
 _DOTNET_EXT = {".dll", ".exe"}  # ambiguous; magic would refine
 _JVM_EXT = {".jar", ".class", ".dex", ".apk", ".aar"}
 
+# Content magic for binaries/archives a filename may not advertise. Authoritative over a
+# non-binary extension: an extensionless executable, or a binary masquerading under a
+# source/text suffix, must still reach the RE path — trusting the extension is itself a
+# weakness for a malicious-code detector.
+_BINARY_MAGIC: tuple[tuple[bytes, str], ...] = (
+    (b"\x7fELF", "native-binary"),           # ELF (Linux/BSD; incl. Bun/pkg single-file CLIs)
+    (b"MZ", "native-binary"),                # PE / DOS (Windows exe/dll)
+    (b"\xfe\xed\xfa\xce", "native-binary"),  # Mach-O 32-bit
+    (b"\xfe\xed\xfa\xcf", "native-binary"),  # Mach-O 64-bit
+    (b"\xce\xfa\xed\xfe", "native-binary"),  # Mach-O 32-bit (byte-swapped)
+    (b"\xcf\xfa\xed\xfe", "native-binary"),  # Mach-O 64-bit (byte-swapped)
+    (b"PK\x03\x04", "archive"),              # zip family (jar/apk/asar/whl/…)
+    (b"PK\x05\x06", "archive"),              # empty zip
+    (b"\x1f\x8b", "archive"),                # gzip
+    (b"7z\xbc\xaf\x27\x1c", "archive"),      # 7-zip
+    (b"\xfd7zXZ\x00", "archive"),            # xz
+    (b"\x28\xb5\x2f\xfd", "archive"),        # zstd
+)
+
+
+def _sniff_magic(path: Path) -> str | None:
+    """A binary/archive kind from the file's leading bytes, or None. Best-effort: an
+    unreadable or non-existent path (e.g. a bare relative label) yields None."""
+    try:
+        with open(path, "rb") as fh:
+            head = fh.read(8)
+    except OSError:
+        return None
+    for sig, kind in _BINARY_MAGIC:
+        if head.startswith(sig):
+            return kind
+    return None
+
 
 def classify_kind(path: Path) -> str:
     name = path.name
     ext = path.suffix.lower()
     if name in _MANIFESTS:
         return "manifest"
+    # Explicit binary/bytecode/archive extensions keep their precise kind (trusted).
     if ext in _JVM_EXT:
         return {"jar": "jar", "apk": "apk", "dex": "dex"}.get(ext.lstrip("."), "jvm-bytecode")
     if ext in {".pyc", ".pyo"}:
@@ -50,6 +86,11 @@ def classify_kind(path: Path) -> str:
         return "archive"
     if ext in _NATIVE_EXT:
         return "native-binary"
+    # No binary extension: content magic is authoritative — catches the extensionless
+    # executable and the binary hiding under a benign suffix that extension-only misses.
+    sniffed = _sniff_magic(path)
+    if sniffed:
+        return sniffed
     if ext in _SOURCE_EXT:
         return "source-file"
     if ext in {".json", ".yaml", ".yml", ".toml", ".ini", ".cfg", ".md", ".txt"}:

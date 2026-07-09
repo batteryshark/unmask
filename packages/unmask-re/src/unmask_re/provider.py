@@ -296,8 +296,15 @@ class SkillTransformProvider:
                                           "skill.json has no entry.command")
         # entry.command is resolved relative to the skill dir (e.g. ["node","runtime/run.mjs"]).
         argv = [_resolve_cmd_part(sk.skill_dir, command[0])] + list(command[1:])
-        # Positional args per entry.args order: input, outdir.
-        argv += [str(artifact.path), str(workdir)]
+        # Positional args per entry.args: always the input path; append the workdir only
+        # when the skill declares a SECOND positional (an outdir). Stdout-only skills
+        # (bin-triage, the covert scanners, secrets-scan) declare just `input`, and an
+        # extra positional makes their argparse reject the entire call.
+        positional_args = [a for a in (entry.get("args") or [])
+                           if isinstance(a, dict) and not str(a.get("name", "")).startswith("-")]
+        argv.append(str(artifact.path))
+        if len(positional_args) >= 2:
+            argv.append(str(workdir))
         os.makedirs(workdir, exist_ok=True)
         try:
             proc = subprocess.run(
@@ -353,7 +360,10 @@ def _kind_to_caps(kind: str) -> tuple[str, ...]:
     the same skill the planner requested."""
     return {
         "obfuscated-source": ("deobfuscate-js", "deobfuscate"),
-        "native-binary": ("decompile-native", "binary-triage"),
+        # `triage-binary` is the real bin-triage capability (was mis-named `binary-triage`,
+        # which no skill advertises, so native binaries fell through to an honest blind spot
+        # even though format-agnostic triage was available).
+        "native-binary": ("decompile-native", "triage-binary"),
         "dotnet": ("decompile-dotnet",),
         "jar": ("decompile-jvm",),
         "apk": ("decompile-jvm",),
