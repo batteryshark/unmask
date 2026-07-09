@@ -440,9 +440,14 @@ class ProposeLeads(BaseNode[MCDGraphState, MCDGraphDeps, dict]):
                 if new_obs:
                     all_obs.extend(new_obs)
                     grew = True
+                terminal_ok = resolution in ("finding", "cleared")
                 d.ledger.set_work_status(
-                    wid, "done" if resolution in ("finding", "cleared") else "deferred",
-                    result={"kind": ld.kind, "resolution": resolution})
+                    wid, "done" if terminal_ok else "deferred",
+                    result={"kind": ld.kind, "resolution": resolution},
+                    # deferred requires a reason; the resolution (human/unactionable/error)
+                    # is it. Also stamp the domain verdict as a queryable state_label.
+                    error=None if terminal_ok else f"lead unresolved: {resolution}",
+                    state_label=resolution)
                 recorded.append({"kind": ld.kind, "target": ld.target,
                                  "rationale": ld.rationale, "resolution": resolution})
             if not grew:
@@ -716,19 +721,22 @@ def _handle_scan_binary(ctx: _Ctx, item: dict) -> None:
     installed = any(p.error is None for p in d.toolchain.providers)
     if installed:
         d.ledger.set_work_status(item["id"], "deferred",
-            result={"note": "RE provider(s) present but none deep-analysed this artifact "
-                            "(no binary-capable provider, or a non-functional one); not decompiled."})
+            error="RE provider(s) present but none deep-analysed this artifact "
+                  "(no binary-capable provider, or a non-functional one); not decompiled.",
+            state_label="not-deep-analysed")
     else:
         d.ledger.set_work_status(item["id"], "blocked",
             error="No RE provider installed (install unmask-re); binary not deeply "
-                  "analysed. Reported as a coverage blind spot.")
+                  "analysed. Reported as a coverage blind spot.",
+            state_label="not-deep-analysed")
 
 
 def _handle_lead(ctx: _Ctx, item: dict) -> None:
     """Defensive drain: leads are normally driven terminal inside ProposeLeads. Any left
     queued (e.g. ProposeLeads crashed mid-loop) are deferred as tracked open leads."""
     ctx.deps.ledger.set_work_status(item["id"], "deferred",
-        result={"note": "lead proposed but not executed (interrupted); tracked for follow-up."})
+        error="lead proposed but not executed (interrupted); tracked for follow-up.",
+        state_label="open-lead")
 
 
 # unmask's work-queue registry — the operations ProcessWorkQueue drains. muster owns the

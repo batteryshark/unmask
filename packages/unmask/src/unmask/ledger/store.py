@@ -22,8 +22,10 @@ from muster.ledger import SCHEMA_VERSION, Ledger, new_id, stable_key, utcnow  # 
 
 _DOMAIN_SCHEMA_PATH = Path(__file__).with_name("schema.sql")
 _DOMAIN_SCHEMA = _DOMAIN_SCHEMA_PATH.read_text(encoding="utf-8")  # read once at import
-# Domain derived tables muster's reset_run_derived wipes on resume, on top of the
-# spine's own (artifacts, work_items, graph_events, reports, questions).
+# Domain derived tables to wipe on resume, on top of the spine's own derived tables
+# (artifacts, graph_events, reports, questions). NOTE: muster now keeps the work queue
+# (work_items/work_notes) durable across resume for watch-and-wake consumers; unmask does
+# NOT want that (see reset_run_derived below), so it wipes those itself.
 _DOMAIN_RESET_TABLES = ("observations", "findings", "judgments", "qa_suggestions")
 
 
@@ -34,6 +36,15 @@ class LedgerStore(Ledger):
             extra_schema=_DOMAIN_SCHEMA,
             reset_tables=_DOMAIN_RESET_TABLES,
         )
+
+    def reset_run_derived(self, run_id: str) -> None:
+        """unmask re-derives its ENTIRE work queue each drive (re-inventory → re-scan →
+        re-enqueue), so on resume it wipes work_items/work_notes too — unlike muster's
+        default, which keeps the queue durable. Without this, a terminal item (e.g. a
+        consent-gated fetch that finished 'needs_review: awaiting consent') would survive
+        and stable-key dedup would stop the now-answered re-drive from re-processing it."""
+        super().reset_run_derived(run_id)
+        self.delete_run_rows(run_id, "work_items", "work_notes")
 
     # --- observations / findings -----------------------------------------
     def add_observation(self, *, run_id, atom, confidence, method, rule_id=None,

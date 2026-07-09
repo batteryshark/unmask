@@ -973,7 +973,7 @@ wheels = [
 [[package]]
 name = "muster"
 version = "0.0.1"
-source = { git = "https://github.com/batteryshark/muster.git?rev=3a14fad5dec9e84483d12ebd4c3a62aecbb0eeb5#3a14fad5dec9e84483d12ebd4c3a62aecbb0eeb5" }
+source = { git = "https://github.com/batteryshark/muster.git?rev=09735fe5f5743451769f58ea9dd3232430e36136#09735fe5f5743451769f58ea9dd3232430e36136" }
 dependencies = [
     { name = "pydantic-graph" },
 ]
@@ -2115,7 +2115,7 @@ review = [
 [package.metadata]
 requires-dist = [
     { name = "mcp", marker = "extra == 'mcp'", specifier = ">=1.0.0" },
-    { name = "muster", git = "https://github.com/batteryshark/muster.git?rev=3a14fad5dec9e84483d12ebd4c3a62aecbb0eeb5" },
+    { name = "muster", git = "https://github.com/batteryshark/muster.git?rev=09735fe5f5743451769f58ea9dd3232430e36136" },
     { name = "pydantic", specifier = ">=2.7" },
     { name = "pydantic-ai", marker = "extra == 'review'", specifier = ">=0.0.1" },
     { name = "pydantic-graph", specifier = ">=0.0.1" },
