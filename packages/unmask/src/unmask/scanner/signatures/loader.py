@@ -27,10 +27,6 @@ _VENDORED_PACKS = {
     "binary-import": "binary-imports.json",
 }
 
-# The atom registry sits beside the signature packs in the vendored taxonomy tree
-# (packs at vendored/signatures/packs, registry at vendored/ontology/...).
-_ATOM_REGISTRY_REL = ("ontology", "atom-registry.json")
-
 
 class SignaturePackError(ValueError):
     """Raised when a signature pack is missing or malformed."""
@@ -38,32 +34,6 @@ class SignaturePackError(ValueError):
 
 def vendored_packs_dir() -> Path:
     return _UNMASK_PKG / "taxonomy" / "vendored" / "signatures" / "packs"
-
-
-def _load_atom_registry(vendored_root: Path) -> frozenset[str]:
-    """Skill-emitted tactic atoms (OBF/EVADE/STEGO) declared in the taxonomy's
-    atom registry. These are produced by the RE covert-scan skills, not by the
-    signature packs, so the registry is their canonical definition home — it lets
-    core validate them by exact atom, not just a family whitelist. A missing
-    registry is not an error (e.g. a custom packs dir in a test): it just means no
-    registry atoms."""
-    fp = vendored_root.joinpath(*_ATOM_REGISTRY_REL)
-    if not fp.is_file():
-        return frozenset()
-    try:
-        data = json.loads(fp.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as e:
-        raise SignaturePackError(f"malformed atom registry {fp}: {e}") from e
-    rows = data.get("atoms") if isinstance(data, dict) else None
-    if not isinstance(rows, list):
-        raise SignaturePackError(f"{fp}: 'atoms' must be a list")
-    atoms: set[str] = set()
-    for i, row in enumerate(rows):
-        try:
-            atoms.add(str(row["atom"]))
-        except (KeyError, TypeError) as e:
-            raise SignaturePackError(f"{fp}: invalid atom at atoms[{i}]: {e}") from e
-    return frozenset(atoms)
 
 
 def _structural_validate(data: dict, path: Path) -> None:
@@ -139,9 +109,8 @@ def _first_match(rules, candidate: str, lang: str) -> Hit | None:
 class Signatures:
     """Facade over the vendored packs: classify callees, imports, and content."""
 
-    def __init__(self, packs: dict[str, SignaturePack], registry_atoms: frozenset[str] = frozenset()):
+    def __init__(self, packs: dict[str, SignaturePack]):
         self.packs = packs
-        self.registry_atoms = registry_atoms
 
     @classmethod
     def load_vendored(cls, packs_dir: Path | None = None) -> "Signatures":
@@ -155,12 +124,13 @@ class Signatures:
         return self.packs["callee"].match_rules
 
     def known_atoms(self) -> frozenset[str]:
-        """Every atom the vendored taxonomy can assign — the canonical vocabulary an
-        RE skill's emitted atoms are validated against before ingestion. This is the
-        union of the atoms the signature packs map to and the skill-emitted tactic
-        atoms declared in the taxonomy's atom registry (OBF/EVADE/STEGO), which name
-        tactics no pack rule produces."""
-        atoms: set[str] = set(self.registry_atoms)
+        """Every atom the vendored signature packs can assign — the canonical
+        vocabulary an RE skill's emitted atoms are validated against before
+        ingestion. Skills emit judgment-free atoms from this vocabulary (e.g. a XOR
+        string decode is ``XFRM.BITWISE``, an env-gate is ``ENVI.ENVCHECK``); the
+        obfuscation/evasion *judgment* over them lives in the compose lens, not the
+        atom names."""
+        atoms: set[str] = set()
         for pack in self.packs.values():
             atoms.update(r.atom for r in pack.match_rules)
             atoms.update(r.atom for r in pack.content_rules)
@@ -170,10 +140,9 @@ class Signatures:
         """Atom family prefixes (the part before the dot). Ingestion validates by
         family, not exact atom, so a skill may emit a newer subtype in a known
         family (e.g. a future ``XFRM.*``) without core gatekeeping it — but a
-        garbage family is rejected. ``OBF``/``EVADE``/``STEGO`` derive naturally from
-        the registry atoms in ``known_atoms()``. ``AITM`` (prompt-injection, emitted by
-        the manifest/content passes rather than any pack or registry atom) has no
-        backing atom to derive from, so it stays whitelisted here."""
+        garbage family is rejected. ``AITM`` (prompt-injection, emitted by the
+        manifest/content passes rather than any pack rule) has no backing pack atom
+        to derive from, so it stays whitelisted here."""
         fams = {a.split(".", 1)[0] for a in self.known_atoms()}
         fams.add("AITM")
         return frozenset(fams)
@@ -209,7 +178,4 @@ def _load_vendored_cached(packs_dir_str: str | None) -> "Signatures":
             loaded[name] = load_pack(fp)
     if "callee" not in loaded:
         raise SignaturePackError(f"no callee pack under {packs_dir}")
-    # packs_dir is <vendored>/signatures/packs; the registry sits at
-    # <vendored>/ontology/atom-registry.json.
-    registry_atoms = _load_atom_registry(packs_dir.parents[1])
-    return Signatures(loaded, registry_atoms)
+    return Signatures(loaded)

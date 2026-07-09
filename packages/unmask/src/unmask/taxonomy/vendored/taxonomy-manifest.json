@@ -1,17 +1,12 @@
 {
   "schemaVersion": "0.1.0",
   "taxonomyId": "parallax-taxonomy",
-  "sourceGitCommit": "dce34adf4add74d58c6f1bcabf2b7d4569fa2101",
+  "sourceGitCommit": "f862fb12987b9753d913f81fb6f53e781b950556",
   "includedRoots": [
     "signatures",
-    "reference",
-    "ontology"
+    "reference"
   ],
   "files": [
-    {
-      "path": "ontology/atom-registry.json",
-      "sha256": "3f6100bd7e1ef16a2979cc8e21de6e8273f5b873640080fa50e41f4bd56b907f"
-    },
     {
       "path": "reference/benign-ips.json",
       "sha256": "bf91db48897e69143f7f757f881cf11060612fa741d8f83fd39271ead638d7eb"

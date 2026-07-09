@@ -447,7 +447,7 @@
           }
         }
       },
-      "sha256": "a7a91dbfa4420aba97fc703f2c8ab76e7854bfdd22acc2fb55af80d311ebbb5a"
+      "sha256": "49a8f855cdb0082ee7f12f546650a5449e341941e63d0dddd2c4745a0d80f737"
     },
     {
       "id": "js-string-decode",
@@ -575,7 +575,7 @@
           }
         }
       },
-      "sha256": "4f0e1d4e0b80ba172d4845183ae71f6eb1febe508eb884e3c1929c0662933de9"
+      "sha256": "7c3e68c5e74423d3f84916efb992989979ce8382c3d53d631c00a314f1761f49"
     },
     {
       "id": "secrets-scan",

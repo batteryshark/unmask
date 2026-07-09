@@ -280,19 +280,31 @@ def mcd(obs, inv=None) -> list:
     # charcode encoding, control-flow flattening, packing, steganographic characters);
     # plain minification (XFRM.RENAME) and a lone base64 (XFRM.ENCODE) do NOT qualify.
     # Aggregate concealment atoms per top-level artifact: a carved/unpacked bundle explodes
-    # into many members, but "this component is obfuscated" is ONE concern. OBF.*/STEGO.*
-    # (which carry decoded/recovered payload as evidence) are cited FIRST so the finding
-    # shows what the concealment was hiding, not just that concealment exists.
+    # into many members, but "this component is obfuscated" is ONE concern. Covert-scan
+    # atoms (which carry decoded/recovered payload as evidence) are cited FIRST so the
+    # finding shows what the concealment was hiding, not just that concealment exists.
     _obf_by_root: dict = {}
     for path, group in groups.items():
-        conceal = _has(group, "XFRM.STRCON", "XFRM.CTRLFLOW", "XFRM.PACK", "XFRM.STEG",
-                       "OBF.XOR", "OBF.CHARCODE", "OBF.ESCAPE",
-                       "STEGO.BIDI", "STEGO.HOMOGLYPH", "STEGO.INVISIBLE")
+        # Strong concealment qualifies from any source: a pack that maps control-flow
+        # flattening, packing, string-construction, or steganographic transforms has
+        # already made a concealment observation.
+        strong = _has(group, "XFRM.STRCON", "XFRM.CTRLFLOW", "XFRM.PACK", "XFRM.STEG")
+        # The covert-scan skills map their tactics onto broad judgment-free atoms
+        # (XOR -> XFRM.BITWISE, charcode/escape -> XFRM.ENCODE, homoglyph/bidi/zero-
+        # width -> XFRM.UNICODE). Those atoms are benign in bulk (a lone base64 is
+        # XFRM.ENCODE; ordinary bit-twiddling is XFRM.BITWISE), so only the covert-
+        # scan-flagged occurrences count as concealment — keyed on method (provenance),
+        # not the atom name. This is where the obfuscation *judgment* lives.
+        covert = [o for o in _has(group, "XFRM.BITWISE", "XFRM.ENCODE", "XFRM.UNICODE")
+                  if o.method == "covert-scan"]
+        conceal = strong + covert
         if conceal:
             _obf_by_root.setdefault(path.split("!", 1)[0], []).extend(conceal)
     for root in _obf_by_root:
+        # Cite covert-scan atoms first — they carry the recovered/decoded payload as
+        # evidence, so the finding shows what the concealment was hiding.
         conceal = sorted(_obf_by_root[root],
-                         key=lambda o: 0 if o.atom.startswith(("OBF", "STEGO")) else 1)
+                         key=lambda o: 0 if o.method == "covert-scan" else 1)
         n += 1
         kinds = ", ".join(sorted({o.atom for o in conceal}))
         findings.append(_finding(
@@ -324,15 +336,24 @@ def mcd(obs, inv=None) -> list:
     # BP-EVASION: behavior gated on the RUNTIME ENVIRONMENT — timezone, locale, geo, proxy.
     # Environment-keyed conditional behavior is anti-analysis (stay dormant in a sandbox) or
     # victim-targeting (fire only for specific regions). Benign software has no reason to
-    # hide behind the analyst's environment. (Atoms come from the js/py covert-scan skills.)
+    # hide behind the analyst's environment. The env-gate tactics map onto broad atoms
+    # (ENVI.ENVCHECK/SANDBOX/DEBUG) that the packs also emit for benign env reads (NODE_ENV,
+    # feature flags), so only the covert-scan-flagged occurrences are the evasion signal —
+    # keyed on method (provenance), not the atom name. The evasion *judgment* lives here.
     _evade_roots: set = set()
     for path, group in groups.items():
-        evade = _has(group, "EVADE.TIMEZONE", "EVADE.LOCALE", "EVADE.GEO", "EVADE.PROXY")
+        evade = [o for o in _has(group, "ENVI.ENVCHECK", "ENVI.SANDBOX", "ENVI.DEBUG")
+                 if o.method == "covert-scan"]
         root = path.split("!", 1)[0]
         if evade and root not in _evade_roots:
             _evade_roots.add(root)
             n += 1
-            kinds = ", ".join(sorted({o.atom.split(".", 1)[1].lower() for o in evade}))
+            # The specific gate (timezone/locale/geo/proxy/sandbox) is carried in each
+            # atom's evidence note; fall back to the atom subtype if absent.
+            kinds = ", ".join(sorted({
+                ((o.evidence or "").split("(")[0].strip().rstrip(".").lower()
+                 or o.atom.split(".", 1)[1].lower())
+                for o in evade}))
             findings.append(_finding(
                 f"mcd-{n}", "mcd", "Environment-keyed evasion / targeting",
                 f"The code changes what it does based on the runtime environment ({kinds}) — "
