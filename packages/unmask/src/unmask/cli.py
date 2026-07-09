@@ -46,7 +46,6 @@ def _cmd_run(args: argparse.Namespace) -> int:
 
     config = MCDConfig(
         storage_root=args.storage_root,
-        scanner_root=args.scanner_root,
         sandbox=args.sandbox,
         network=args.network,
         tool_profile=args.tool_profile,
@@ -218,8 +217,6 @@ def build_parser() -> argparse.ArgumentParser:
     run = sub.add_parser("run", help="scan a target")
     run.add_argument("target")
     run.add_argument("--storage-root", default=".mcd")
-    run.add_argument("--scanner-root", default="auto",
-                     help="path to a parallax-goalpacks checkout (engine + mcd_lens)")
     run.add_argument("--sandbox", default="auto",
                      choices=["auto", "subprocess", "openshell", "none"])
     run.add_argument("--network", default="offline",

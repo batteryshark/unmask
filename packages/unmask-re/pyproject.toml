@@ -9,7 +9,7 @@ description = "unmask reverse-engineering skills — binary triage, decompilers,
 readme = "README.md"
 requires-python = ">=3.11"
 license = "Apache-2.0"
-authors = [{ name = "Mario Mercaldi" }]
+authors = [{ name = "batteryshark" }]
 
 # Heavy deps live here, not in core. Kept minimal in the stub; real providers add
 # lief/capstone/unicorn and manage external tools (jadx/ghidra/ilspy) out of band.

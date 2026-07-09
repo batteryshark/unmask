@@ -1,29 +1,26 @@
 #!/usr/bin/env python3
-"""Vendor the deterministic scanner (engine + mcd_lens) and taxonomy DATA into
-the `unmask` wheel so it is fully self-contained — no runtime dependency on an
-external ``parallax-goalpacks`` or ``parallax-taxonomy`` checkout.
+"""Vendor the taxonomy DATA into the `unmask` wheel so it is fully self-contained
+— no runtime dependency on an external ``parallax-taxonomy`` checkout.
 
-Sources are treated as READ-ONLY. What lands in the wheel:
+The deterministic scanner is native to unmask (``src/unmask/scanner``); only the
+taxonomy data is vendored here. What lands in the wheel:
 
-  src/unmask/_vendor/engine       <- parallax-goalpacks/engine  (pure stdlib)
-  src/unmask/_vendor/mcd_lens     <- parallax-goalpacks/mcd_lens (pure stdlib)
   src/unmask/taxonomy/vendored/   <- parallax-taxonomy (allowlisted roots only)
 
-The taxonomy copy is ALLOWLISTED: only ``signatures/`` (schema.json + packs/* +
-examples/) and ``reference/*.json``. Everything else in the taxonomy repo
-(``.git``, ``.venv``, doc roots, ``ontology/`` (markdown atoms), the nested
-``parallax/`` subrepo, ``scripts/``, ``tests/``) is intentionally excluded.
+The taxonomy copy is ALLOWLISTED: only ``signatures/`` (schema.json + the TOML
+authoring packs + their JSON mirrors + examples/) and ``reference/*.json``.
+Everything else in the taxonomy repo (``.git``, ``.venv``, doc roots, ``ontology/``,
+the nested ``parallax/`` subrepo, ``scripts/``, ``tests/``) is intentionally
+excluded.
 
 A ``taxonomy-manifest.json`` records the source git commit and a sha256 of every
 vendored taxonomy file, so CI can detect drift with ``--check``.
 
 Usage::
 
-    python scripts/vendor.py                 # (re)vendor from default sibling sources
+    python scripts/vendor.py                 # (re)vendor from the default sibling source
     python scripts/vendor.py --check         # fail if vendored tree is stale/missing
-    python scripts/vendor.py \
-        --goalpacks /path/to/parallax-goalpacks \
-        --taxonomy  /path/to/parallax-taxonomy
+    python scripts/vendor.py --taxonomy /path/to/parallax-taxonomy
 """
 
 from __future__ import annotations
@@ -39,18 +36,15 @@ from pathlib import Path
 # scripts/ -> packages/unmask/ -> src/unmask
 PKG_ROOT = Path(__file__).resolve().parents[1]
 UNMASK_SRC = PKG_ROOT / "src" / "unmask"
-VENDOR_DIR = UNMASK_SRC / "_vendor"
 TAXONOMY_DIR = UNMASK_SRC / "taxonomy" / "vendored"
 MANIFEST_PATH = TAXONOMY_DIR / "taxonomy-manifest.json"
 
-# Repo layout: mcd/packages/unmask/scripts -> ... -> runner-lab/
+# Repo layout: unmask/packages/unmask/scripts -> ... -> runner-lab/
 RUNNER_LAB = PKG_ROOT.parents[2]
-DEFAULT_GOALPACKS = RUNNER_LAB / "parallax-goalpacks"
 DEFAULT_TAXONOMY = RUNNER_LAB / "parallax-taxonomy"
 
 COPY_EXCLUDES = {"__pycache__", ".DS_Store"}
-# Taxonomy allowlist: which roots are vendored, and (for reference) which
-# extensions. signatures/ is copied wholesale (minus junk); reference/ is json-only.
+# Taxonomy allowlist: signatures/ is copied wholesale (minus junk); reference/ is json-only.
 SIGNATURES_ROOT = "signatures"
 REFERENCE_ROOT = "reference"
 TAXONOMY_MARKER = Path("signatures") / "schema.json"
@@ -113,21 +107,13 @@ def _build_manifest(source_commit: str) -> dict:
     }
 
 
-def do_vendor(goalpacks: Path, taxonomy: Path) -> None:
-    if not (goalpacks / "engine" / "__init__.py").is_file():
-        sys.exit(f"error: engine not found under {goalpacks}")
-    if not (goalpacks / "mcd_lens" / "__init__.py").is_file():
-        sys.exit(f"error: mcd_lens not found under {goalpacks}")
+def do_vendor(taxonomy: Path) -> None:
     if not (taxonomy / TAXONOMY_MARKER).is_file():
         sys.exit(f"error: taxonomy marker {TAXONOMY_MARKER} not found under {taxonomy}")
 
-    VENDOR_DIR.mkdir(parents=True, exist_ok=True)
-    _copy_tree(goalpacks / "engine", VENDOR_DIR / "engine")
-    _copy_tree(goalpacks / "mcd_lens", VENDOR_DIR / "mcd_lens")
-
-    # Rebuild the vendored taxonomy from scratch so any non-allowlisted roots
-    # left over from an earlier copy are pruned. Only signatures/ + reference/
-    # (and the generated manifest) are allowed to exist here.
+    # Rebuild the vendored taxonomy from scratch so any non-allowlisted roots left
+    # over from an earlier copy are pruned. Only signatures/ + reference/ (and the
+    # generated manifest) are allowed to exist here.
     if TAXONOMY_DIR.exists():
         shutil.rmtree(TAXONOMY_DIR)
     TAXONOMY_DIR.mkdir(parents=True, exist_ok=True)
@@ -139,7 +125,6 @@ def do_vendor(goalpacks: Path, taxonomy: Path) -> None:
 
     manifest = _build_manifest(_git_commit(taxonomy))
     MANIFEST_PATH.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
-    print(f"vendored engine + mcd_lens -> {VENDOR_DIR}")
     print(f"vendored taxonomy ({len(manifest['files'])} files) -> {TAXONOMY_DIR}")
     print(f"manifest @ commit {manifest['sourceGitCommit']}")
 
@@ -172,13 +157,12 @@ def do_check() -> int:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--goalpacks", type=Path, default=DEFAULT_GOALPACKS)
     ap.add_argument("--taxonomy", type=Path, default=DEFAULT_TAXONOMY)
     ap.add_argument("--check", action="store_true", help="verify vendored taxonomy matches its manifest")
     args = ap.parse_args()
     if args.check:
         return do_check()
-    do_vendor(args.goalpacks.expanduser().resolve(), args.taxonomy.expanduser().resolve())
+    do_vendor(args.taxonomy.expanduser().resolve())
     return 0
 
 

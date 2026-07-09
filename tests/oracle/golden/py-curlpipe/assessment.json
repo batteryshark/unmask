@@ -307,6 +307,6 @@
     "relatedFindingCount": 0
   },
   "target": {
-    "path": "/Users/batteryshark/Downloads/runner-lab/mcd/tests/oracle/fixtures/py-curlpipe"
+    "path": "tests/oracle/fixtures/py-curlpipe"
   }
 }

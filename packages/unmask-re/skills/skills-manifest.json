@@ -1,6 +1,6 @@
 {
   "schemaVersion": "0.1.0",
-  "sourceRoot": "/Users/batteryshark/Downloads/runner-lab/rekit",
+  "sourceRoot": "rekit",
   "skills": [
     {
       "id": "unpack",

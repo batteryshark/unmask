@@ -67,9 +67,9 @@ post-compose interpretation layer; the compose oracle stays judgment-free.
 chunks, so a 50+ finding run can't hit an output-size limit; any finding the model skips
 falls through to `needs_human`, never a silent drop.
 
-See `docs/design.md` for the full design and the deferred milestones (sandbox providers
-beyond local, dynamic execution, tool-install CLI, registry metadata; documented blind
-spots in v0.1).
+See [`docs/design.md`](docs/design.md) for the full design and the deferred milestones
+(sandbox providers beyond local, dynamic execution, tool-install CLI, registry metadata;
+documented blind spots in v0.1).
 
 ### What's a blind spot in v0.1
 
@@ -80,4 +80,6 @@ spots in v0.1).
 - **Registry metadata.** npm/PyPI enrichment is offline; confidence reflects static evidence
   without external corroboration.
 
-Apache-2.0
+## License
+
+Apache-2.0 — see [LICENSE](LICENSE).

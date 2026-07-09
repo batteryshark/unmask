@@ -1,5 +1,5 @@
 Parallax engine (vendored)
-Copyright 2026 Mario Mercaldi
+Copyright 2026 batteryshark
 
 This directory is a vendored copy of the package-neutral Parallax detection
 engine (formerly published as `prlx-engine`, importable here as `engine`),

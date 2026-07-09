@@ -251,6 +251,6 @@
     "ecosystems": [
       "npm"
     ],
-    "path": "/Users/batteryshark/Downloads/runner-lab/mcd/tests/oracle/fixtures/benign-pkg"
+    "path": "tests/oracle/fixtures/benign-pkg"
   }
 }

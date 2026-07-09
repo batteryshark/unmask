@@ -298,6 +298,6 @@
   },
   "target": {
     "ecosystems": [],
-    "path": "/Users/batteryshark/Downloads/runner-lab/mcd/tests/oracle/fixtures/obf-js"
+    "path": "tests/oracle/fixtures/obf-js"
   }
 }

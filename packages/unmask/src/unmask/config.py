@@ -23,10 +23,6 @@ class MCDConfig:
     run_id: str = "auto"
     project_id: str = "auto"
 
-    # Where the vendored parallax scanner (engine + mcd_lens) is resolved from.
-    # "auto" -> $UNMASK_SCANNER_ROOT, else search upward for a parallax-goalpacks
-    # checkout. Later this becomes a packaged, vendored copy.
-    scanner_root: str = "auto"
     taxonomy_root: str = "auto"
 
     # Default posture: safe, offline, static. Nothing here executes target code.

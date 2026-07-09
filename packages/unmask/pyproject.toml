@@ -44,18 +44,13 @@ Homepage = "https://github.com/batteryshark/unmask"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/unmask"]
-# The vendored scanner (engine + mcd_lens) and taxonomy carry non-.py data files
-# (JSON/YAML schema + signature packs, the engine's bundled taxonomy fallback,
-# READMEs, the taxonomy manifest). `packages` only grabs .py modules, so include
-# these data files explicitly or the wheel ships an unusable scanner.
+# The vendored taxonomy carries non-.py data files (schema.json, the TOML/JSON
+# signature packs, reference/*.json, READMEs, the taxonomy manifest). `packages`
+# only grabs .py modules, so include these data files explicitly or the wheel
+# ships an unusable scanner.
 artifacts = [
-    "src/unmask/_vendor/**/*.json",
-    "src/unmask/_vendor/**/*.yaml",
-    "src/unmask/_vendor/**/*.yml",
-    "src/unmask/_vendor/**/*.md",
     "src/unmask/taxonomy/vendored/**/*.json",
-    "src/unmask/taxonomy/vendored/**/*.yaml",
-    "src/unmask/taxonomy/vendored/**/*.yml",
+    "src/unmask/taxonomy/vendored/**/*.toml",
     "src/unmask/taxonomy/vendored/**/*.md",
 ]
 
