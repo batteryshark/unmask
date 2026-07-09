@@ -50,6 +50,28 @@ ATOMS = {
     "EVADE.ANTIDEBUG": ("EVADE", 0.55, "debugger/tracer detection"),
 }
 
+# Internal tactic id -> the REAL judgment-free parallax atom emitted downstream.
+# The ATOMS ids above stay as internal identifiers (they carry the per-tactic
+# confidence + human note); at emission we translate to the parallax atom and tag
+# method="covert-scan" so the consumer's lens re-derives the obfuscation/evasion
+# judgment by provenance. Several tactics collapse onto one atom (e.g. exec/eval and
+# decode-then-exec both -> LOAD.EVAL) — the per-tactic `note` keeps them distinct.
+TACTIC_TO_ATOM = {
+    "STEGO.INVISIBLE": "XFRM.UNICODE",
+    "STEGO.BIDI":      "XFRM.UNICODE",
+    "STEGO.HOMOGLYPH": "XFRM.UNICODE",
+    "OBF.DECODE_EXEC": "LOAD.EVAL",
+    "OBF.EXEC":        "LOAD.EVAL",
+    "OBF.MARSHAL":     "LOAD.DESER",
+    "OBF.PICKLE":      "LOAD.DESER",
+    "OBF.DYNIMPORT":   "LOAD.REFLECT",
+    "OBF.CHARCODE":    "XFRM.ENCODE",
+    "EVADE.PLATFORM":  "ENVI.ENVCHECK",
+    "EVADE.SANDBOX":   "ENVI.SANDBOX",
+    "EVADE.TIMEZONE":  "ENVI.ENVCHECK",
+    "EVADE.ANTIDEBUG": "ENVI.DEBUG",
+}
+
 _CONFUSABLE = {
     0x2018: "'", 0x2019: "'", 0x201B: "'", 0x02BC: "'", 0x02B9: "'", 0x2032: "'", 0x00B4: "'",
     0x201C: '"', 0x201D: '"', 0x2033: '"', 0x00A0: " ", 0x2007: " ", 0x2009: " ", 0x202F: " ",
@@ -81,9 +103,14 @@ _DECODE_SRC = re.compile(r"\b(?:b(?:16|32|64|85)decode|a85decode|unhexlify|fromh
 
 
 def _finding(atom, path, line_no, col, snippet, extra=None):
-    fam, conf, note = ATOMS[atom]
-    f = {"atom": atom, "family": fam, "confidence": conf, "file": path,
-         "line": line_no, "col": col, "note": note, "snippet": snippet[:160]}
+    # `atom` is the internal tactic id; look up its confidence + note, but emit the
+    # real parallax atom/family and tag the provenance so the consumer can judge.
+    _fam, conf, note = ATOMS[atom]
+    real = TACTIC_TO_ATOM[atom]
+    fam = real.split(".", 1)[0]
+    f = {"atom": real, "family": fam, "confidence": conf, "file": path,
+         "line": line_no, "col": col, "note": note, "snippet": snippet[:160],
+         "method": "covert-scan"}
     if extra:
         f.update(extra)
     return f
@@ -160,7 +187,8 @@ def assess(findings: list) -> str:
 def main(argv: list[str]) -> int:
     p = argparse.ArgumentParser(prog="py-covert-scan")
     p.add_argument("input")
-    p.add_argument("--format", choices=["text", "json"], default="text")
+    p.add_argument("--format", choices=["text", "json"], default="json",
+                   help="json is the machine default the RE provider consumes; text for humans")
     args = p.parse_args(argv[1:])
     if not os.path.exists(args.input):
         sys.stdout.write(json.dumps({"ok": False, "error": f"not found: {args.input}"}) + "\n")

@@ -1,9 +1,10 @@
 """RE provider registration — the real skill-driven transform provider.
 
 Replaces the capability stub. Loads ``skills-manifest.json`` (written by
-``scripts/sync_skills.py``), reads each skill's ``skill.json`` for its capability
-strings and prerequisites, and resolves prerequisites (``shutil.which`` + a version
-check on each skill's ``prerequisites[].check`` argv). A skill present-but-prereq-
+``scripts/sync_skills.py`` from rekit's central ``registry.json``) — it carries each
+skill's capability strings, prerequisites, and entry — and resolves prerequisites
+(``shutil.which`` + a version check on each skill's ``prerequisites[].check`` argv).
+No per-skill manifest is read at run time. A skill present-but-prereq-
 missing advertises NOTHING — so a binary that needs, say, jadx routes to an honest
 blind spot instead of the old stub's misleading "decompile-jvm available".
 
@@ -94,6 +95,7 @@ class _ResolvedSkill:
     capabilities: list[str]
     prereqs_ok: bool
     missing_prereqs: list[str]
+    entry: dict = field(default_factory=dict)
 
 
 def _scrub_env(env: dict[str, str]) -> dict[str, str]:
@@ -114,7 +116,7 @@ def _version_tuple(s: str) -> tuple[int, ...]:
 
 
 def _check_prereq(prereq: dict) -> bool:
-    """Run a skill.json prerequisite check: tool on PATH (+ optional min_version)."""
+    """Run a skill's prerequisite check: tool on PATH (+ optional min_version)."""
     tool = prereq.get("tool")
     check = prereq.get("check")
     if not tool or not check:
@@ -160,7 +162,8 @@ def _resolved_skills() -> tuple[_ResolvedSkill, ...]:
         missing = [p.get("tool", "?") for p in prereqs if not _check_prereq(p)]
         out.append(_ResolvedSkill(
             id=sid, skill_dir=sdir, capabilities=list(rec.get("capabilities") or []),
-            prereqs_ok=not missing, missing_prereqs=missing))
+            prereqs_ok=not missing, missing_prereqs=missing,
+            entry=dict(rec.get("entry") or {})))
     return tuple(out)
 
 
@@ -300,17 +303,14 @@ class SkillTransformProvider:
 
     def _run_skill(self, sk: _ResolvedSkill, artifact: ArtifactRef, cap: str,
                    workdir: str) -> TransformResult:
-        skill_json_path = sk.skill_dir / "skill.json"
-        try:
-            manifest = json.loads(skill_json_path.read_text(encoding="utf-8"))
-        except (OSError, ValueError) as exc:
-            return TransformResult.failed(self.id, artifact.logical_path, cap,
-                                          f"unreadable skill.json: {exc!r}")
-        entry = manifest.get("entry") or {}
+        # entry.command comes from the vendored skills-manifest.json (built by
+        # sync_skills.py from rekit's central registry.json), so no per-skill
+        # manifest read is needed at run time.
+        entry = sk.entry or {}
         command = entry.get("command") or []
         if not command:
             return TransformResult.failed(self.id, artifact.logical_path, cap,
-                                          "skill.json has no entry.command")
+                                          "skill manifest has no entry.command")
         # entry.command is resolved relative to the skill dir (e.g. ["node","runtime/run.mjs"]).
         argv = [_resolve_cmd_part(sk.skill_dir, command[0])] + list(command[1:])
         # Positional args per entry.args: always the input path; append the workdir only

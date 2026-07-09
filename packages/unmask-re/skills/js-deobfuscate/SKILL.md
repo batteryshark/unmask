@@ -1,3 +1,8 @@
+---
+name: js-deobfuscate
+description: "Deobfuscate and unpack obfuscated JavaScript (webcrack): reverses string arrays, folds constants, deflattens control flow, unminifies, and splits webpack/browserify bundles. Encoded string arrays are decoded by running the decoder inside an isolated-vm sandbox — not the whole program."
+---
+
 # JavaScript Deobfuscator
 
 Statically deobfuscate and unpack obfuscated JavaScript using

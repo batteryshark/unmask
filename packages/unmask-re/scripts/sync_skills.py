@@ -31,8 +31,11 @@ import shutil
 import sys
 from pathlib import Path
 
+# rekit skill manifests live in ONE central registry.json (keyed by id); we read the
+# entry for each vendored skill from there — plain JSON, no YAML parser needed.
+
 # Skills unmask-re ships. Each must exist under <rekit-root>/skills/<id>/ with a
-# skill.json. Kept conservative: only the transform/atom-emission skills core's
+# SKILL.md. Kept conservative: only the transform/atom-emission skills core's
 # transform seam can actually drive. Dynamic-exec / frida / qiling / net-capture
 # skills are deliberately excluded — they belong to the (deferred) sandbox
 # milestone, not the v0.1 static+transform scope.
@@ -93,16 +96,20 @@ def sync(rekit_root: Path, dest: Path) -> dict:
     skills_src = rekit_root / "skills"
     if not skills_src.is_dir():
         raise SystemExit(f"rekit skills dir not found: {skills_src}")
+    registry_path = rekit_root / "registry.json"
+    if not registry_path.is_file():
+        raise SystemExit(f"rekit registry not found: {registry_path}")
+    registry = json.loads(registry_path.read_text(encoding="utf-8"))
     dest.mkdir(parents=True, exist_ok=True)
     records = []
     for sid in ALLOWED_SKILLS:
         src = skills_src / sid
-        if not src.is_dir() or not (src / "skill.json").is_file():
-            print(f"  ! {sid}: missing in {skills_src}, skipping", file=sys.stderr)
+        if not src.is_dir() or not (src / "SKILL.md").is_file() or sid not in registry:
+            print(f"  ! {sid}: missing dir/SKILL.md or no registry entry in {rekit_root}, skipping", file=sys.stderr)
             continue
         dst = dest / sid
         _copy_skill(src, dst)
-        manifest = json.loads((src / "skill.json").read_text(encoding="utf-8"))
+        manifest = registry[sid]
         records.append({
             "id": sid,
             "name": manifest.get("name", sid),
