@@ -1,12 +1,17 @@
 {
   "schemaVersion": "0.1.0",
   "taxonomyId": "parallax-taxonomy",
-  "sourceGitCommit": "c4f02328bed72906f8134501a8ff1df89e7821ad",
+  "sourceGitCommit": "dce34adf4add74d58c6f1bcabf2b7d4569fa2101",
   "includedRoots": [
     "signatures",
-    "reference"
+    "reference",
+    "ontology"
   ],
   "files": [
+    {
+      "path": "ontology/atom-registry.json",
+      "sha256": "3f6100bd7e1ef16a2979cc8e21de6e8273f5b873640080fa50e41f4bd56b907f"
+    },
     {
       "path": "reference/benign-ips.json",
       "sha256": "bf91db48897e69143f7f757f881cf11060612fa741d8f83fd39271ead638d7eb"
@@ -45,39 +50,39 @@
     },
     {
       "path": "signatures/README.md",
-      "sha256": "c26cbf284dc373d09da9a7ceb16647f594c9a1554a835a2eace18ac951a40e13"
+      "sha256": "a289da7b41a45f669cbdd77ba02ac49d36737eeb531e32036a42c485e6a94e52"
     },
     {
-      "path": "signatures/examples/core-surfaces.yaml",
-      "sha256": "b2d2b7042afab6806bef77409357a867cd03365746346cff753784df25a5355d"
+      "path": "signatures/examples/core-surfaces.toml",
+      "sha256": "94011c3d2dd2cd6330f32e005e7e783b8c3343e667fbc16e7e41c68e398a9266"
     },
     {
       "path": "signatures/packs/README.md",
-      "sha256": "d794d4c66e78776c1fdd4978d7238f77a9179a35ad5aa409a7b62a5f323b2bed"
+      "sha256": "5a83768d7d2295f49ec4baf077b8dcdc2fd8e43774f4e18cb36598e4e41509e6"
     },
     {
       "path": "signatures/packs/binary-imports.json",
       "sha256": "89105cbd762a52f6df72ff522cc32e36bd728e32d1e74860d73bc913fa4924f7"
     },
     {
-      "path": "signatures/packs/binary-imports.yaml",
-      "sha256": "cf3b49402d9ab419e6871f9036c908300cb45e7b8c9749f420eeb6685d245ae1"
+      "path": "signatures/packs/binary-imports.toml",
+      "sha256": "7edfa702acda15ade7cb1933b1955cf9a50ec635186a8dd3304acbc4f43a2eec"
     },
     {
       "path": "signatures/packs/content-surfaces.json",
       "sha256": "a9c33584fd28011a2cc8b84800f02dccad80678bc4c277d4383eca3c5348b30c"
     },
     {
-      "path": "signatures/packs/content-surfaces.yaml",
-      "sha256": "6936d6b8f0d3c8a89c7e409a6e1b6320fdebc6e50a87bcb5bb9a9e85b0daaec9"
+      "path": "signatures/packs/content-surfaces.toml",
+      "sha256": "69aa93ce90a898f848dd0a23f7c87cc3047359c5ffe8b63c0f6910566870a5b5"
     },
     {
       "path": "signatures/packs/source-callees.json",
       "sha256": "ed0d9cf732060120d1a363a8549b220f3db3d116b0c19dbcf342e830b052bca9"
     },
     {
-      "path": "signatures/packs/source-callees.yaml",
-      "sha256": "203ca728ba05deba9247ad5482759a2d14ecfa7ae2c007bbbcad767a4d1c281f"
+      "path": "signatures/packs/source-callees.toml",
+      "sha256": "c157914c883341fd5328c9844e6fef52618566f98b89de8aa8d2f41cb980508d"
     },
     {
       "path": "signatures/schema.json",

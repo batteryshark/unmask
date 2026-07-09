@@ -10,8 +10,10 @@ Sources are treated as READ-ONLY. What lands in the wheel:
   src/unmask/taxonomy/vendored/   <- parallax-taxonomy (allowlisted roots only)
 
 The taxonomy copy is ALLOWLISTED: only ``signatures/`` (schema.json + packs/* +
-examples/) and ``reference/*.json``. Everything else in the taxonomy repo
-(``.git``, ``.venv``, doc roots, the nested ``parallax/`` subrepo, ``scripts/``,
+examples/), ``reference/*.json``, and ``ontology/atom-registry.json`` (the
+skill-emitted OBF/EVADE/STEGO atom vocabulary the core validates against).
+Everything else in the taxonomy repo (``.git``, ``.venv``, doc roots, the rest of
+``ontology/`` (markdown atoms), the nested ``parallax/`` subrepo, ``scripts/``,
 ``tests/``) is intentionally excluded.
 
 A ``taxonomy-manifest.json`` records the source git commit and a sha256 of every
@@ -53,6 +55,9 @@ COPY_EXCLUDES = {"__pycache__", ".DS_Store"}
 # extensions. signatures/ is copied wholesale (minus junk); reference/ is json-only.
 SIGNATURES_ROOT = "signatures"
 REFERENCE_ROOT = "reference"
+ONTOLOGY_ROOT = "ontology"
+# Only this one JSON file is taken from ontology/ (the rest is markdown docs).
+ATOM_REGISTRY_REL = Path("ontology") / "atom-registry.json"
 TAXONOMY_MARKER = Path("signatures") / "schema.json"
 
 SCHEMA_VERSION = "0.1.0"
@@ -85,6 +90,15 @@ def _copy_reference_json(src: Path, dst: Path) -> None:
         shutil.copy2(p, dst / p.name)
 
 
+def _copy_atom_registry(taxonomy: Path) -> None:
+    src = taxonomy / ATOM_REGISTRY_REL
+    if not src.is_file():
+        sys.exit(f"error: atom registry {ATOM_REGISTRY_REL} not found under {taxonomy}")
+    dst = TAXONOMY_DIR / ATOM_REGISTRY_REL
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(src, dst)
+
+
 def _git_commit(repo: Path) -> str:
     try:
         out = subprocess.check_output(
@@ -108,7 +122,7 @@ def _build_manifest(source_commit: str) -> dict:
         "schemaVersion": SCHEMA_VERSION,
         "taxonomyId": TAXONOMY_ID,
         "sourceGitCommit": source_commit,
-        "includedRoots": [SIGNATURES_ROOT, REFERENCE_ROOT],
+        "includedRoots": [SIGNATURES_ROOT, REFERENCE_ROOT, ONTOLOGY_ROOT],
         "files": files,
     }
 
@@ -133,6 +147,7 @@ def do_vendor(goalpacks: Path, taxonomy: Path) -> None:
     TAXONOMY_DIR.mkdir(parents=True, exist_ok=True)
     _copy_tree(taxonomy / SIGNATURES_ROOT, TAXONOMY_DIR / SIGNATURES_ROOT)
     _copy_reference_json(taxonomy / REFERENCE_ROOT, TAXONOMY_DIR / REFERENCE_ROOT)
+    _copy_atom_registry(taxonomy)
 
     if not (TAXONOMY_DIR / TAXONOMY_MARKER).is_file():
         sys.exit(f"error: vendored taxonomy is missing marker {TAXONOMY_MARKER}")
