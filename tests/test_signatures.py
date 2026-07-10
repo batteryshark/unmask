@@ -25,8 +25,9 @@ def _sigs() -> Signatures:
 
 def test_packs_load():
     s = _sigs()
-    # 90 upstream + 2 added (load.eval.python.dynamic-exec, xfrm.encode.base64).
-    assert len(s.callee_rules) == 92
+    # 90 upstream + 2 added (load.eval.python.dynamic-exec, xfrm.encode.base64)
+    # + 1 (js EXEC.SHELL split: bare exec/execSync separated from qualified child_process.exec).
+    assert len(s.callee_rules) == 93
     # 106 upstream + 1 added (remote-download-cmd -> NETW.HTTP for curl|sh droppers).
     assert len(s.packs["content"].content_rules) == 107
     assert len(s.packs["binary-import"].match_rules) == 11
