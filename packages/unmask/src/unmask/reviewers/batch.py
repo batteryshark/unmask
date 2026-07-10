@@ -26,7 +26,9 @@ cheaper and is used automatically; the batch path is for larger runs.
 from __future__ import annotations
 
 from unmask.reviewers.adjudicate import _evidence_for, adjudicate
-from unmask.reviewers.agent import REVIEW_INSTRUCTIONS, build_reviewer, render_evidence
+from unmask.reviewers.agent import (
+    REVIEW_INSTRUCTIONS, _ev_text, build_reviewer, render_evidence,
+)
 from unmask.reviewers.schemas import FindingReview
 
 # Below this finding count the single-finding reviewer (one run_sync per finding)
@@ -47,11 +49,29 @@ _BATCH_INSTRUCTIONS = (
     "finding in the chunk. Process them one at a time, citing each finding's id. When "
     "you have recorded a review for every finding in the chunk, you are done with that "
     "chunk — do not add prose. A finding you genuinely cannot judge gets verdict "
-    "`needs_human`, never a skip."
+    "`needs_human`, never a skip.\n\n"
+    "TOOL — expand_evidence(observation_id, offset=0): supporting matches are shown "
+    "clipped. When the clipped preview is not enough to rule — you must read a full "
+    "obfuscated blob, decode a value, or check whether a fetched value flows into exec — "
+    "call expand_evidence with that observation's id to page its full content (6000 chars "
+    "per call; use offset to page further). Recovered payloads are already shown in full."
 )
 
 
-def build_batch_reviewer(model=None):
+def _expand_evidence(obs_by_id: dict | None, observation_id: str,
+                     offset: int = 0, window: int = 6000) -> dict:
+    """Page the full evidence of a cited observation (what the expand_evidence tool
+    returns). Bounded to `window` chars per call; the model pages with `offset`."""
+    o = (obs_by_id or {}).get(observation_id)
+    if not o:
+        return {"error": f"no observation {observation_id!r}"}
+    ev = _ev_text(o)
+    return {"observation_id": observation_id, "atom": o.get("atom"),
+            "offset": offset, "total_len": len(ev),
+            "content": ev[offset:offset + window], "has_more": offset + window < len(ev)}
+
+
+def build_batch_reviewer(model=None, obs_by_id=None):
     """Construct a batch reviewer Agent + the list it will record into.
 
     Returns ``(agent, reviews)``: the agent records each verdict into ``reviews``
@@ -72,6 +92,13 @@ def build_batch_reviewer(model=None):
     def _record(review: FindingReview) -> dict:
         reviews.append(review)
         return {"recorded": review.finding_id, "total_recorded": len(reviews)}
+
+    if obs_by_id:
+        @agent.tool_plain(name="expand_evidence")
+        def _expand(observation_id: str, offset: int = 0) -> dict:
+            """Read the full content of a cited observation when its clipped preview is
+            not enough to rule (an obfuscated blob to decode, a dataflow link to check)."""
+            return _expand_evidence(obs_by_id, observation_id, offset)
 
     return agent, reviews
 
@@ -131,14 +158,15 @@ def review_assessment_batched(assessment: dict, *, model=None, agent=None,
         from unmask.reviewers.adjudicate import review_assessment
         return review_assessment(assessment, model=model, only_severities=only_severities)
 
+    obs_by_id = {o.get("id"): o for o in assessment.get("observations", [])}
+
     if agent is None:
-        agent, collected = build_batch_reviewer(model)
+        agent, collected = build_batch_reviewer(model, obs_by_id=obs_by_id)
     else:
         collected = reviews if reviews is not None else []
     if collected is None:
         collected = []
 
-    obs_by_id = {o.get("id"): o for o in assessment.get("observations", [])}
     reviewed_ids: set[str] = set()
     turns = 0
 
