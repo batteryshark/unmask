@@ -221,3 +221,15 @@ def test_render_evidence_surfaces_recovered_unclipped_and_clips_supporting():
     assert "Supporting matches" in out
     assert big_supporting not in out and "chars clipped]" in out   # supporting: clipped
     assert out.index("RECOVERED PAYLOADS") < out.index("Supporting matches")  # dispositive first
+
+
+def test_expand_evidence_pages_the_full_observation():
+    """The expand_evidence tool lets the reviewer page a cited observation's full
+    content in bounded windows when the clipped preview isn't enough to rule."""
+    from unmask.reviewers.batch import _expand_evidence
+    obs = {"obs-9": {"id": "obs-9", "atom": "XFRM.BITWISE", "evidence": "X" * 10000}}
+    first = _expand_evidence(obs, "obs-9", offset=0, window=6000)
+    assert first["total_len"] == 10000 and len(first["content"]) == 6000 and first["has_more"]
+    second = _expand_evidence(obs, "obs-9", offset=6000, window=6000)
+    assert len(second["content"]) == 4000 and not second["has_more"]
+    assert "error" in _expand_evidence(obs, "no-such-obs")
