@@ -18,12 +18,15 @@ muster = { git = "https://github.com/batteryshark/muster.git", rev = "09735fe5f5
 unmask = { workspace = true }
 unmask-re = { workspace = true }
 
-# Convenience: `uv sync` at the root brings up the core for development.
+# A cloned repo's `uv sync` brings up the WHOLE tool — core + review + MCP + the
+# unmask-re binary/RE add-on — via unmask's `all` extra, so a newcomer gets a working
+# install in one command. (Working on the core alone? `uv sync --package unmask`.)
+# The light-core-only story is the PyPI split: `pip install unmask` vs `unmask-re`.
 [project]
 name = "mcd-workspace"
 version = "0"
 requires-python = ">=3.11"
-dependencies = ["unmask"]
+dependencies = ["unmask[all]"]
 
 [dependency-groups]
 dev = ["pytest>=8"]

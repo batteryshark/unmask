@@ -182,6 +182,26 @@ def _capabilities() -> list[str]:
     return out
 
 
+def _prerequisites_status() -> list[dict]:
+    """Per external-tool readiness across every skill: is the tool on PATH (+ its version
+    check), which skills need it, and the manifest's install hint. Drives the external-
+    tools section of `unmask tools doctor` and the setup script's install offers."""
+    tools: dict[str, dict] = {}
+    for rec in _load_manifest().get("skills", []):
+        for pr in (rec.get("prerequisites") or []):
+            tool = pr.get("tool")
+            if not tool:
+                continue
+            entry = tools.get(tool)
+            if entry is None:
+                entry = tools[tool] = {
+                    "tool": tool, "present": _check_prereq(pr),
+                    "hint": pr.get("install_hint", ""), "neededBy": []}
+            entry["neededBy"].append(rec.get("id"))
+    # Missing first, then alphabetical — the actionable ones surface at the top.
+    return sorted(tools.values(), key=lambda t: (t["present"], t["tool"]))
+
+
 def _skill_for(cap: str) -> _ResolvedSkill | None:
     sid = _CAP_TO_SKILL.get(cap)
     if not sid:
@@ -252,6 +272,11 @@ class SkillTransformProvider:
             if sk.prereqs_ok:
                 avail.append(sk.id)
         self.tools_available = avail
+
+    def prerequisites_status(self) -> list[dict]:
+        """External-tool readiness (see module `_prerequisites_status`). Core's doctor
+        duck-types this off the loaded provider instance to render the tools section."""
+        return _prerequisites_status()
 
     # -- TransformProvider protocol ------------------------------------------------
 
