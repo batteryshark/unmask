@@ -190,3 +190,34 @@ def test_check_url_returns_validated_public_ips():
     ok2, reason2, addrs2 = check_url("https://rebind.evil/x",
                                      resolver=lambda h: [ipaddress.ip_address("10.0.0.1")])
     assert not ok2 and addrs2 == [] and "non-public" in reason2
+
+
+# --- evidence tiering: a decoded payload is dispositive and never clipped ----
+
+def test_is_recovered_distinguishes_decoded_from_raw_matches():
+    from unmask.reviewers.agent import is_recovered
+    assert is_recovered("recovered concealed string via constant-key XOR (key=91): evil.com")
+    assert is_recovered("decoded base64 payload: rm -rf /")
+    assert not is_recovered("var __create=Object.create;")          # raw compiler helper
+    assert not is_recovered('var lookup="ABCDEFGHabcd0123+/";')     # base64 alphabet table
+    assert not is_recovered("")
+
+
+def test_render_evidence_surfaces_recovered_unclipped_and_clips_supporting():
+    """The de-escalation fix: a recovered payload (a decoded fact) is shown in full and
+    marked dispositive, ahead of clipped supporting matches — so benign bulk can't
+    outvote it. A minified megaline of raw match is still clipped."""
+    from unmask.reviewers.agent import render_evidence
+    big_recovered = "recovered concealed string via XOR: " + "evil.example," * 5000
+    big_supporting = "var __create=" + "a" * 5000  # huge raw pattern match
+    out = "\n".join(render_evidence([
+        {"id": "obs-1", "atom": "XFRM.BITWISE", "location": {"path": "a.js", "line": 1},
+         "evidence": big_recovered},
+        {"id": "obs-2", "atom": "XFRM.BITWISE", "location": {"path": "a.js", "line": 1},
+         "evidence": big_supporting},
+    ]))
+    assert "RECOVERED PAYLOADS" in out and "DISPOSITIVE" in out
+    assert big_recovered in out                        # recovered fact: never clipped
+    assert "Supporting matches" in out
+    assert big_supporting not in out and "chars clipped]" in out   # supporting: clipped
+    assert out.index("RECOVERED PAYLOADS") < out.index("Supporting matches")  # dispositive first
