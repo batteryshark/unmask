@@ -41,12 +41,23 @@ def build_reviewer(model=None):
     return Agent(model, output_type=FindingReview, instructions=REVIEW_INSTRUCTIONS, retries=2)
 
 
+# A single cited snippet can be a whole minified/obfuscated line — hundreds of KB.
+# The reviewer only needs a representative sample to judge the match; the full blob
+# would blow past the model's context window (a 400KB line ~= 130K tokens). Clip it.
+MAX_EVIDENCE_CHARS = 600
+
+
+def _clip(ev, limit: int = MAX_EVIDENCE_CHARS) -> str:
+    s = "" if ev is None else str(ev)
+    return s if len(s) <= limit else f"{s[:limit]}…[+{len(s) - limit} chars clipped]"
+
+
 def _evidence_line(o: dict) -> str:
     loc = o.get("location") or {}
     ev = o.get("evidence")
     if isinstance(ev, dict):
         ev = ev.get("matchedText") or ev.get("summary")
-    return f"- {o.get('atom')} @ {loc.get('path')}:{loc.get('line')} — {ev}"
+    return f"- {o.get('atom')} @ {loc.get('path')}:{loc.get('line')} — {_clip(ev)}"
 
 
 def build_prompt(finding: dict, evidence: list[dict]) -> str:
