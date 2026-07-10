@@ -133,9 +133,17 @@ class ScanAndCompose(BaseNode[MCDGraphState, MCDGraphDeps, dict]):
         _enter(ctx, "ScanAndCompose")
         reveal_dir = str(d.paths.run_dir / "revealed")
         scanner = NativeScanner()
+        obs_cache = d.paths.run_dir / "artifacts" / "scan" / "observe-cache.json"
         try:
-            observations, inv = await asyncio.to_thread(
-                partial(scanner.observe, str(s.target_path), reveal_dir=reveal_dir))
+            cached = _load_scan_cache(obs_cache) if d.resume else None
+            if cached is not None:
+                # Resume: reuse the deterministic observe() snapshot; only re-compose.
+                observations, inv, _ = cached
+                d.ledger.event(s.run_id, "ScanAndCompose", "note", {"observeCache": "reused"})
+            else:
+                observations, inv = await asyncio.to_thread(
+                    partial(scanner.observe, str(s.target_path), reveal_dir=reveal_dir))
+                _save_scan_cache(obs_cache, observations, inv)
             result = await asyncio.to_thread(
                 partial(scanner.compose_assess_render, observations, inv, str(s.target_path)))
         except Exception as exc:  # a broken target, not a missing scanner
@@ -324,8 +332,25 @@ class ProcessTransforms(BaseNode[MCDGraphState, MCDGraphDeps, dict]):
         transformed: list[str] = []
         dropped: list[dict] = []
         notes: list[dict] = []
+        xform_cache = d.paths.run_dir / "artifacts" / "scan" / "transform-cache.json"
 
-        if providers:
+        cached = _load_scan_cache(xform_cache) if d.resume else None
+        if cached is not None:
+            # Resume: the fixpoint (the run's cost centre — it re-scans every byte a
+            # provider recovered) already produced this union. Reuse it and skip straight
+            # to the re-compose. `inv` here is the POST-transform inventory (the fixpoint
+            # folds recovered files in), so put it back on scratch for downstream nodes.
+            all_obs, inv, extra = cached
+            transformed = list(extra.get("transformed") or [])
+            dropped = list(extra.get("dropped") or [])
+            notes = list(extra.get("notes") or [])
+            d.scratch["inv"] = inv
+            d.scratch["transforms"] = {
+                "providers": extra.get("providers") or [],
+                "transformed": transformed, "droppedAtoms": dropped, "notes": notes,
+            }
+            d.ledger.event(s.run_id, "ProcessTransforms", "note", {"transformCache": "reused"})
+        elif providers:
             from unmask.scanner.signatures import Signatures
             sigs = Signatures.load_vendored()
             known_families = sigs.known_families()
@@ -346,10 +371,19 @@ class ProcessTransforms(BaseNode[MCDGraphState, MCDGraphDeps, dict]):
                 d.ledger.event(s.run_id, "ProcessTransforms", "error", {"error": repr(exc)})
                 all_obs = list(observations)
                 transformed.clear(); dropped.clear(); notes.clear()  # roll back partial claims
+            provider_ids = [getattr(p, "id", "re-provider") for p in providers]
             d.scratch["transforms"] = {
-                "providers": [getattr(p, "id", "re-provider") for p in providers],
+                "providers": provider_ids,
                 "transformed": transformed, "droppedAtoms": dropped, "notes": notes,
             }
+            # Snapshot the post-fixpoint union so `unmask resume` skips the re-scan. Only
+            # worth it when the fixpoint actually recovered something (an empty fixpoint
+            # is already cheap to redo). `inv` is post-transform here.
+            if transformed or dropped or notes:
+                _save_scan_cache(xform_cache, all_obs, inv, extra={
+                    "providers": provider_ids, "transformed": transformed,
+                    "dropped": dropped, "notes": notes,
+                })
 
         if not (fetched_grew or transformed or dropped or notes):
             d.ledger.event(s.run_id, "ProcessTransforms", "note", {"transformed": 0})
@@ -751,6 +785,68 @@ _DISPATCHER = WorkDispatcher({
 
 
 # --- helpers ---------------------------------------------------------------
+
+# --- resume: cache the expensive observe() output so `unmask resume` reuses it -------
+# The observe pass — the base source scan and, above all, the transform fixpoint's
+# re-scan of every byte a provider recovers — is the run's cost centre and is
+# deterministic. We snapshot its output (raw Observations + inventory) to a run-dir
+# artifact, which survives `reset_run_derived` just like the fetch cache, and reload it
+# on resume; compose stays fresh (cheap). This is purely an optimization: the save and
+# load are best-effort and never raise, so on any serialization problem a resume simply
+# falls back to a fresh observe — it can never be less correct than a from-scratch run.
+
+def _obs_to_json(observations) -> list:
+    from dataclasses import asdict
+    return [asdict(o) for o in observations]
+
+
+def _obs_from_json(rows) -> list:
+    from unmask.scanner.observe.atoms import Observation
+    return [Observation(**r) for r in rows]
+
+
+def _inv_from_json(d: dict):
+    from unmask.scanner.observe.inventory import FileEntry, Inventory
+    return Inventory(
+        root=d["root"],
+        files=[FileEntry(**f) for f in d.get("files") or []],
+        purpose=d.get("purpose", ""),
+        dataflow=d.get("dataflow") or {},
+        reachability=d.get("reachability") or {},
+    )
+
+
+def _save_scan_cache(path: Path, observations, inv, extra: dict | None = None) -> None:
+    """Best-effort snapshot of an observe() result for a future `unmask resume`. Never
+    raises: if the result won't serialize, we don't cache it (and remove any stale file)
+    so resume re-scans as before rather than trusting a half-written cache."""
+    from dataclasses import asdict
+    try:
+        payload = {"observations": _obs_to_json(observations), "inventory": asdict(inv)}
+        if extra:
+            payload["extra"] = extra
+        path.parent.mkdir(parents=True, exist_ok=True)
+        _atomic_write(path, json.dumps(payload))
+    except Exception:
+        try:
+            path.unlink()
+        except OSError:
+            pass
+
+
+def _load_scan_cache(path: Path):
+    """Reload a cache written by `_save_scan_cache`. Returns ``(observations, inv, extra)``
+    or ``None`` when absent/unreadable — in which case the caller observes fresh."""
+    try:
+        if not path.is_file():
+            return None
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        return (_obs_from_json(payload.get("observations") or []),
+                _inv_from_json(payload.get("inventory") or {}),
+                payload.get("extra") or {})
+    except Exception:
+        return None
+
 
 def _record_scan(ctx: _Ctx, result) -> None:
     """Record a scan result's observations + findings into the ledger. Called for the
