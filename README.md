@@ -16,24 +16,54 @@ The workflow is a **phase graph**; the durable source of truth for coverage and
 resumability is a **per-run SQLite ledger**. The model never decides completion; the
 ledger's coverage gate does. Full rationale: [`docs/design.md`](docs/design.md).
 
-## Two wheels, two personas
+## Install
+
+Not on PyPI yet — run it from source with [uv](https://docs.astral.sh/uv/):
 
 ```bash
-pip install unmask          # "I'm about to run this, is it suspicious?"  (static/source)
-pip install unmask[review]  # + bounded, typed agentic adjudication of findings
-pip install unmask-re       # "I have these binaries, rip them apart"     (decompile/triage/sandbox)
+git clone https://github.com/batteryshark/unmask
+cd unmask
+./setup.sh          # installs everything, optionally configures a review model, checks RE tools
 ```
 
-Core (`unmask`) stays light and offline. Reverse-engineering skills live in the optional
-`unmask-re` wheel and register through the `unmask.providers` entry-point group. **If
-`unmask-re` is not installed, binaries are reported as an explicit blind spot**, never
-silently skipped.
+`setup.sh` is interactive and safe to re-run. To do it by hand instead:
 
 ```bash
-unmask run ./suspicious-package
-unmask tree ./suspicious-package
-unmask tools doctor
-unmask report --run-dir .mcd/projects/<project>/runs/<run> --format html
+uv sync                            # core + RE add-on + review + MCP, in one .venv
+cp .env.example .env               # then edit, only if you want --review (model endpoint + key)
+uv run unmask tools doctor         # what's installed, what's missing, and how to fix it
+uv run unmask run ./suspicious-package
+```
+
+(From a source checkout, commands run as `uv run unmask …`, or activate `.venv` and drop the prefix.)
+
+## Two wheels, two personas
+
+`uv sync` brings up both wheels this repo ships:
+
+- **`unmask`** — the light, offline core: static/source analysis, graph + ledger, report.
+- **`unmask-re`** — the reverse-engineering add-on: binary triage, decompilers, deobfuscation.
+  It registers through the `unmask.providers` entry-point group. **Without it, binaries are
+  reported as an explicit blind spot, never silently skipped.** A few decompilers also need an
+  external tool (jadx, ilspycmd); `unmask tools doctor` shows which resolved and how to get the
+  rest — each is optional and gates only its own binary type.
+
+Once published, the two wheels install independently from PyPI: `pip install unmask` (core),
+`pip install unmask[all]` (everything), `pip install unmask-re` (the RE add-on on its own).
+
+### Configuring review
+
+The deterministic scan needs no model and runs offline. The `--review` overlay (bounded, typed
+agentic adjudication of findings) needs one: set it in `.env` — see [`.env.example`](.env.example).
+Pick a provider preset (`openai`, `anthropic`, `lmstudio`, `minimax`, `zai`, or `custom` for any
+OpenAI/Anthropic-compatible endpoint), give it a model id and a key, and `unmask tools doctor`
+will confirm it's wired up. `setup.sh` writes this for you.
+
+```bash
+uv run unmask run ./suspicious-package
+uv run unmask tree ./suspicious-package
+uv run unmask tools doctor
+uv run unmask report --run-dir .mcd/projects/<project>/runs/<run> --format html
 ```
 
 ## Layout

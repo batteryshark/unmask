@@ -93,26 +93,15 @@ def _cmd_tree(args: argparse.Namespace) -> int:
 
 
 def _cmd_tools(args: argparse.Namespace) -> int:
-    from unmask.providers import discover_providers
-
     if args.tools_cmd != "doctor":
         print("usage: unmask tools doctor", file=sys.stderr)
         return 2
-    status = discover_providers()
-    rep = status.to_report()
+    from unmask.doctor import readiness_report, render_readiness
+    rep = readiness_report()
     if args.json:
         print(json.dumps(rep, indent=2))
         return 0
-    print(f"RE providers installed: {rep['reProvidersInstalled']}")
-    if rep["providers"]:
-        for p in rep["providers"]:
-            mark = "!" if p["error"] else "+"
-            print(f"  [{mark}] {p['id']}: {', '.join(p['capabilities']) or '(no caps)'}"
-                  f"{'  ERROR: ' + p['error'] if p['error'] else ''}")
-    else:
-        print("  (none registered)")
-    if rep["hint"]:
-        print(f"\n{rep['hint']}")
+    print(render_readiness(rep))
     return 0
 
 
@@ -295,7 +284,24 @@ def build_parser() -> argparse.ArgumentParser:
     return p
 
 
+def _load_dotenv() -> None:
+    """Load a `.env` (model endpoint/keys — the `UNMASK_REVIEW_*` vars) from the working
+    directory upward, so config lives in a gitignored file instead of manual `export`s.
+    Best-effort and non-overriding: a real exported env var always wins, and a missing
+    file or missing dotenv never fails the CLI."""
+    try:
+        from dotenv import find_dotenv, load_dotenv
+        # usecwd=True: search from the working directory upward (where the user runs
+        # unmask), not from this module's location. override=False → real env wins.
+        found = find_dotenv(usecwd=True)
+        if found:
+            load_dotenv(found)
+    except Exception:
+        pass
+
+
 def main(argv: list[str] | None = None) -> int:
+    _load_dotenv()
     parser = build_parser()
     args = parser.parse_args(argv)
     if args.version:

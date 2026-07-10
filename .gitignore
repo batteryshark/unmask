@@ -9,6 +9,9 @@ dist/
 # uv
 .uv/
 
+# Local config / secrets (model endpoint + keys). Ship .env.example, never .env.
+.env
+
 # Tooling / OS
 .DS_Store
 .mypy_cache/

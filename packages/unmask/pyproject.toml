@@ -20,6 +20,7 @@ dependencies = [
     "muster",  # the ledgered investigation runtime (graph + ledger + resume + patterns)
     "pydantic>=2.7",
     "pydantic-graph>=0.0.1",
+    "python-dotenv>=1.0",  # load model endpoint/keys from a .env (UNMASK_REVIEW_*)
     "tree-sitter>=0.23",
     "tree-sitter-language-pack>=1.0",
 ]
@@ -29,6 +30,10 @@ dependencies = [
 review = ["pydantic-ai>=0.0.1"]
 # Model Context Protocol server: expose scan/resume/report to agents.
 mcp = ["mcp>=1.0.0"]
+# Everything: core + review + MCP + the unmask-re binary/RE add-on. This is the
+# one-shot "give me the whole tool" install — `pip install unmask[all]`, and what
+# the workspace root pulls in so a cloned repo's `uv sync` brings up all of it.
+all = ["unmask[review]", "unmask[mcp]", "unmask-re"]
 
 [project.scripts]
 unmask = "unmask.cli:main"

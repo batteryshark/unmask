@@ -913,7 +913,7 @@ name = "mcd-workspace"
 version = "0"
 source = { virtual = "." }
 dependencies = [
-    { name = "unmask" },
+    { name = "unmask", extra = ["all"] },
 ]
 
 [package.dev-dependencies]
@@ -922,7 +922,7 @@ dev = [
 ]
 
 [package.metadata]
-requires-dist = [{ name = "unmask", editable = "packages/unmask" }]
+requires-dist = [{ name = "unmask", extras = ["all"], editable = "packages/unmask" }]
 
 [package.metadata.requires-dev]
 dev = [{ name = "pytest", specifier = ">=8" }]
@@ -2100,11 +2100,17 @@ dependencies = [
     { name = "muster" },
     { name = "pydantic" },
     { name = "pydantic-graph" },
+    { name = "python-dotenv" },
     { name = "tree-sitter" },
     { name = "tree-sitter-language-pack" },
 ]
 
 [package.optional-dependencies]
+all = [
+    { name = "mcp" },
+    { name = "pydantic-ai" },
+    { name = "unmask-re" },
+]
 mcp = [
     { name = "mcp" },
 ]
@@ -2119,10 +2125,14 @@ requires-dist = [
     { name = "pydantic", specifier = ">=2.7" },
     { name = "pydantic-ai", marker = "extra == 'review'", specifier = ">=0.0.1" },
     { name = "pydantic-graph", specifier = ">=0.0.1" },
+    { name = "python-dotenv", specifier = ">=1.0" },
     { name = "tree-sitter", specifier = ">=0.23" },
     { name = "tree-sitter-language-pack", specifier = ">=1.0" },
+    { name = "unmask", extras = ["mcp"], marker = "extra == 'all'", editable = "packages/unmask" },
+    { name = "unmask", extras = ["review"], marker = "extra == 'all'", editable = "packages/unmask" },
+    { name = "unmask-re", marker = "extra == 'all'", editable = "packages/unmask-re" },
 ]
-provides-extras = ["review", "mcp"]
+provides-extras = ["review", "mcp", "all"]
 
 [[package]]
 name = "unmask-re"
