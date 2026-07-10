@@ -26,7 +26,7 @@ cheaper and is used automatically; the batch path is for larger runs.
 from __future__ import annotations
 
 from unmask.reviewers.adjudicate import _evidence_for, adjudicate
-from unmask.reviewers.agent import REVIEW_INSTRUCTIONS, _clip, build_reviewer
+from unmask.reviewers.agent import REVIEW_INSTRUCTIONS, build_reviewer, render_evidence
 from unmask.reviewers.schemas import FindingReview
 
 # Below this finding count the single-finding reviewer (one run_sync per finding)
@@ -84,14 +84,6 @@ def _chunk_prompt(findings_chunk: list[dict], obs_by_id: dict) -> str:
         "",
     ]
     for f in findings_chunk:
-        evidence = _evidence_for(f, obs_by_id)
-        ev_lines = []
-        for o in evidence:
-            loc = o.get("location") or {}
-            ev = o.get("evidence")
-            if isinstance(ev, dict):
-                ev = ev.get("matchedText") or ev.get("summary")
-            ev_lines.append(f"  - {o.get('atom')} @ {loc.get('path')}:{loc.get('line')} — {_clip(ev)}")
         lines += [
             f"## Finding {f.get('id')}: {f.get('title')}  [{f.get('composition')}]",
             f"Engine severity: {f.get('severity')} · engine confidence: {f.get('confidence')}",
@@ -99,7 +91,7 @@ def _chunk_prompt(findings_chunk: list[dict], obs_by_id: dict) -> str:
             "Disproof criteria:",
             *[f"- {d}" for d in (f.get("disproofCriteria") or [])[:3]],
             "Cited evidence:",
-            *ev_lines,
+            *render_evidence(_evidence_for(f, obs_by_id)),
             "",
         ]
     return "\n".join(lines)

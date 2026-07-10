@@ -24,6 +24,14 @@ REVIEW_INSTRUCTIONS = (
     "needs_human (genuinely ambiguous).\n"
     "- Be adversarial toward the FINDING, not the code: if the cited evidence does not "
     "actually support the shape, refute or deescalate. Do not confirm on vibes.\n"
+    "- EVIDENCE TIERS: the cited evidence is split into RECOVERED PAYLOADS (concrete "
+    "strings a decoder ACTUALLY recovered from concealment — e.g. an XOR-decoded domain or "
+    "shell command) and supporting matches (raw-source pattern hits, frequently benign: "
+    "base64 tables, i18n/Unicode strings, compiler helpers, regex .exec). A RECOVERED "
+    "PAYLOAD is DISPOSITIVE: if it is itself a suspicious indicator (a domain, IP, URL, "
+    "shell command, or credential), the concealment is REAL — confirm or escalate — and do "
+    "NOT let benign supporting matches dilute or average it down. Supporting matches alone "
+    "never confirm and never outvote a recovered payload.\n"
     "- Set reviewed_confidence in [0,1] and response_tier in [0..5]. Severity is fixed by "
     "the engine; you do not change it. Set excluded_from_disposition=true for refute/suppress.\n"
     "- Give a concrete justification that cites the evidence, and list which disproof "
@@ -52,12 +60,45 @@ def _clip(ev, limit: int = MAX_EVIDENCE_CHARS) -> str:
     return s if len(s) <= limit else f"{s[:limit]}…[+{len(s) - limit} chars clipped]"
 
 
-def _evidence_line(o: dict) -> str:
-    loc = o.get("location") or {}
+def _ev_text(o: dict) -> str:
     ev = o.get("evidence")
     if isinstance(ev, dict):
         ev = ev.get("matchedText") or ev.get("summary")
-    return f"- {o.get('atom')} @ {loc.get('path')}:{loc.get('line')} — {_clip(ev)}"
+    return "" if ev is None else str(ev)
+
+
+def is_recovered(ev: str) -> bool:
+    """True when a decoder actually produced this plaintext (a dispositive fact), vs a
+    raw pattern match that merely fired on source. Covert-scan decoders prefix recovered
+    strings with 'recovered '/'decoded ' (e.g. 'recovered concealed string via ... XOR')."""
+    s = (ev or "").strip().lower()
+    return s.startswith("recovered ") or s.startswith("decoded ")
+
+
+def render_evidence(evidence: list[dict]) -> list[str]:
+    """Render cited evidence in two precision tiers so the reviewer weights it correctly:
+    RECOVERED PAYLOADS (a decoder produced a concrete plaintext — dispositive, shown
+    un-clipped) and supporting matches (raw-source pattern hits, often benign — clipped).
+    A genuine recovered indicator must not be diluted by benign supporting bulk."""
+    recovered, supporting = [], []
+    for o in evidence:
+        loc = o.get("location") or {}
+        ev = _ev_text(o)
+        head = f"- {o.get('id', '?')} {o.get('atom')} @ {loc.get('path')}:{loc.get('line')} — "
+        (recovered if is_recovered(ev) else supporting).append((head, ev))
+    out: list[str] = []
+    if recovered:
+        out.append("RECOVERED PAYLOADS (a decoder produced these concrete plaintexts — DISPOSITIVE):")
+        out += [h + ev for h, ev in recovered]           # un-clipped: it is a decoded fact
+    if supporting:
+        out.append("Supporting matches (raw-source pattern hits, often benign):")
+        out += [h + _clip(ev) for h, ev in supporting]   # clipped heuristic
+    return out or ["(no cited evidence)"]
+
+
+def _evidence_line(o: dict) -> str:
+    return f"- {o.get('atom')} @ {(o.get('location') or {}).get('path')}:" \
+           f"{(o.get('location') or {}).get('line')} — {_clip(_ev_text(o))}"
 
 
 def build_prompt(finding: dict, evidence: list[dict]) -> str:
@@ -72,8 +113,8 @@ def build_prompt(finding: dict, evidence: list[dict]) -> str:
         "Open verification questions:",
         *[f"- {v.get('question')}" for v in finding.get("verification", [])],
         "",
-        "Cited evidence (atom @ file:line — matched text):",
-        *[_evidence_line(o) for o in evidence],
+        "Cited evidence:",
+        *render_evidence(evidence),
         "",
         f"Review finding {finding.get('id')}: read the evidence, pick the verdict, set "
         "reviewed_confidence and response_tier, and justify against the disproof criteria.",
