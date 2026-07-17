@@ -40,6 +40,8 @@ class Inventory:
     dataflow: dict = field(default_factory=dict)
     # Cross-file reachability: {"reachableSinks": [...], ...} (see observe.callgraph).
     reachability: dict = field(default_factory=dict)
+    # Optional post-triage structural evidence and its coverage/provenance summary.
+    deep_analysis: dict = field(default_factory=dict)
 
     def scannable(self) -> list[FileEntry]:
         return [f for f in self.files if f.kind in _SCANNABLE]

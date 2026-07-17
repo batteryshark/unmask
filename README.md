@@ -66,6 +66,24 @@ uv run unmask tools doctor
 uv run unmask report --run-dir .mcd/projects/<project>/runs/<run> --format html
 ```
 
+### Optional Joern evidence
+
+Use `--joern` when a broad scan finds a behavior whose interprocedural flow needs
+deeper static evidence:
+
+```bash
+UNMASK_REKIT=/path/to/rekit/bin/rekit \
+  uv run unmask run ./suspicious-package --joern
+```
+
+Unmask calls Rekit's public `joern-slice` dispatcher only after native Tree-sitter
+scanning and triage. Rekit must be installed separately and its pinned Joern runtime
+prepared with `rekit install joern-slice`. Analysis itself is offline and bounded. Each
+selected source frontend gets its own CPG; results are never joined across languages.
+If Rekit, Docker, the pinned image, or a frontend is unavailable, the native scan still
+completes and the report records the limitation. An implicit sink selection is retained
+as structural context but does not receive proven-flow confidence.
+
 ## Layout
 
 ```

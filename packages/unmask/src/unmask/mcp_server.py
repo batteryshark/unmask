@@ -67,6 +67,7 @@ def summarize_report(report: dict) -> dict:
     toolchain = report.get("toolchain") or {}
     fetch = report.get("fetch") or {}
     transforms = report.get("transforms") or {}
+    deep = report.get("deepStaticAnalysis") or {}
     return {
         "disposition": disp.get("recommendation"),
         "rationale": disp.get("rationale"),
@@ -83,6 +84,14 @@ def summarize_report(report: dict) -> dict:
             "reHint": toolchain.get("hint"),
             "fetchedUrls": [x.get("url") for x in fetch.get("fetched", []) if x.get("ok")],
             "transformed": transforms.get("transformed"),
+            "deepStaticAnalysis": {
+                "status": deep.get("status"),
+                "frontends": [x.get("frontend") for x in deep.get("frontends") or []],
+                "explicitPaths": deep.get("explicitPaths"),
+                "implicitSinkPaths": deep.get("implicitSinkPaths"),
+                "unresolved": deep.get("unresolved"),
+                "limitations": deep.get("limitations"),
+            } if deep else None,
         },
     }
 
@@ -99,11 +108,13 @@ def _result_summary(result) -> dict:
 
 
 def scan_target(target: str, *, network: str = "offline", review: bool = False,
-                storage_root: str = ".mcd") -> dict:
+                joern: bool = False, storage_root: str = ".mcd") -> dict:
     from unmask import MCDConfig, run_mcd
     if network not in _ALLOWED_NETWORK:
         raise ValueError(f"network must be one of {sorted(_ALLOWED_NETWORK)}; got {network!r}")
-    cfg = MCDConfig(storage_root=storage_root, network=network, review=review)
+    cfg = MCDConfig(
+        storage_root=storage_root, network=network, review=review, joern_enabled=joern
+    )
     return _result_summary(run_mcd(target, cfg))
 
 
@@ -170,13 +181,15 @@ def build_server():
     # server's event loop — offload it to a worker thread.
     @server.tool()
     async def scan(target: str, network: str = "offline", review: bool = False,
-                   storage_root: str = ".mcd") -> dict:
+                   joern: bool = False, storage_root: str = ".mcd") -> dict:
         """Scan a file or directory for malicious-code shapes. Returns a disposition
         (clear/review/quarantine) with the compositions and findings behind it. Never
         executes the target. network='fetch-only' additionally fetches URLs the target
         runs (curl|sh) and rescans them, SSRF-guarded."""
-        return await asyncio.to_thread(
-            partial(scan_target, target, network=network, review=review, storage_root=storage_root))
+        return await asyncio.to_thread(partial(
+            scan_target, target, network=network, review=review, joern=joern,
+            storage_root=storage_root,
+        ))
 
     @server.tool()
     async def resume(run_dir: str, answers: dict | None = None) -> dict:

@@ -57,6 +57,7 @@ artifacts = [
     "src/unmask/taxonomy/vendored/**/*.json",
     "src/unmask/taxonomy/vendored/**/*.toml",
     "src/unmask/taxonomy/vendored/**/*.md",
+    "src/unmask/scanner/deep/*.json",
 ]
 
 [tool.hatch.build.targets.sdist]

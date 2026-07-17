@@ -316,14 +316,14 @@ class ProcessTransforms(BaseNode[MCDGraphState, MCDGraphDeps, dict]):
     binary, so each pass re-plans over what the last pass surfaced, bounded by
     `_MAX_TRANSFORM_PASSES`/`_MAX_TRANSFORMS`."""
 
-    async def run(self, ctx: _Ctx) -> "ProposeLeads":
+    async def run(self, ctx: _Ctx) -> "DeepStaticAnalysis":
         d, s = ctx.deps, ctx.state
         _enter(ctx, "ProcessTransforms")
         scan = d.scratch.get("scan")
         observations = d.scratch.get("observations_raw")
         inv = d.scratch.get("inv")
         if scan is None or observations is None or inv is None:
-            return ProposeLeads()
+            return DeepStaticAnalysis()
         # FetchReferences may already have grown the union (fetched remote code).
         fetched_grew = bool(d.scratch.pop("union_grew", False))
         providers = d.toolchain.transform_providers()
@@ -387,7 +387,7 @@ class ProcessTransforms(BaseNode[MCDGraphState, MCDGraphDeps, dict]):
 
         if not (fetched_grew or transformed or dropped or notes):
             d.ledger.event(s.run_id, "ProcessTransforms", "note", {"transformed": 0})
-            return ProposeLeads()
+            return DeepStaticAnalysis()
 
         # Re-number the union and compose ONCE over it (fetch + transform derived),
         # then re-record the ledger from the recomposed result.
@@ -414,6 +414,72 @@ class ProcessTransforms(BaseNode[MCDGraphState, MCDGraphDeps, dict]):
                         "fetchedGrew": fetched_grew,
                         "observations": len(result.observations),
                         "findings": len(result.findings)})
+        return DeepStaticAnalysis()
+
+
+@dataclass
+class DeepStaticAnalysis(BaseNode[MCDGraphState, MCDGraphDeps, dict]):
+    """Enrich selected unresolved flows with optional Rekit/Joern CPG evidence."""
+
+    async def run(self, ctx: _Ctx) -> "ProposeLeads":
+        d, s = ctx.deps, ctx.state
+        _enter(ctx, "DeepStaticAnalysis")
+        if not d.config.joern_enabled:
+            return ProposeLeads()
+        scan = d.scratch.get("scan")
+        observations = d.scratch.get("observations_raw")
+        inv = d.scratch.get("inv")
+        if scan is None or observations is None or inv is None:
+            return ProposeLeads()
+
+        from unmask.scanner.deep import analyze_with_joern, apply_joern_result
+
+        cache = d.paths.run_dir / "artifacts" / "joern" / "analysis-cache.json"
+        cached = _load_scan_cache(cache) if d.resume else None
+        if cached is not None:
+            observations, inv, extra = cached
+            summary = extra.get("summary") or {}
+            d.ledger.event(s.run_id, "DeepStaticAnalysis", "note", {"cache": "reused"})
+        else:
+            deep = await asyncio.to_thread(partial(
+                analyze_with_joern,
+                scan.findings,
+                observations,
+                inv,
+                str(d.paths.run_dir / "artifacts" / "joern"),
+                dispatcher=d.config.joern_dispatcher,
+                timeout=d.config.joern_timeout,
+                slice_depth=d.config.joern_slice_depth,
+            ))
+            apply_joern_result(deep, observations, inv)
+            summary = deep.summary
+            for artifact in deep.artifacts:
+                d.ledger.add_artifact(
+                    run_id=s.run_id,
+                    kind=artifact["kind"],
+                    origin="joern-slice",
+                    path=artifact["path"],
+                    logical_path=artifact["logicalPath"],
+                    metadata={"frontend": artifact["frontend"]},
+                )
+            if summary.get("status") in {"completed", "partial"}:
+                _save_scan_cache(cache, observations, inv, extra={"summary": summary})
+
+        result = await asyncio.to_thread(partial(
+            NativeScanner().compose_assess_render, observations, inv, str(s.target_path)))
+        d.ledger.reset_observations(s.run_id)
+        d.ledger.reset_findings(s.run_id)
+        _record_scan(ctx, result)
+        d.scratch["scan"] = result
+        d.scratch["observations_raw"] = observations
+        d.scratch["inv"] = inv
+        d.scratch["deep_static_analysis"] = summary
+        d.ledger.event(s.run_id, "DeepStaticAnalysis", "note", {
+            "status": summary.get("status"),
+            "frontends": len(summary.get("frontends") or []),
+            "explicitPaths": summary.get("explicitPaths", 0),
+            "implicitSinkPaths": summary.get("implicitSinkPaths", 0),
+        })
         return ProposeLeads()
 
 
@@ -655,6 +721,9 @@ class RenderReport(BaseNode[MCDGraphState, MCDGraphDeps, dict]):
         leads = d.scratch.get("leads")
         if leads:
             sections["leads"] = leads
+        deep_static = d.scratch.get("deep_static_analysis")
+        if deep_static:
+            sections["deepStaticAnalysis"] = deep_static
         verifications = d.scratch.get("verifications")
         if verifications:
             sections["verifications"] = verifications
@@ -734,6 +803,7 @@ def build_graph() -> Graph:
         g.node(ScanAndCompose),
         g.node(FetchReferences),
         g.node(ProcessTransforms),
+        g.node(DeepStaticAnalysis),
         g.node(ProposeLeads),
         g.node(ReviewFindings),
         g.node(CoverageGate),
@@ -813,6 +883,7 @@ def _inv_from_json(d: dict):
         purpose=d.get("purpose", ""),
         dataflow=d.get("dataflow") or {},
         reachability=d.get("reachability") or {},
+        deep_analysis=d.get("deep_analysis") or {},
     )
 
 

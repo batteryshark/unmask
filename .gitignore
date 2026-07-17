@@ -20,6 +20,8 @@ dist/
 
 # Run output (scans write here by default)
 .mcd/
+# Test Cases for Performance
+test-inputs/
 
 # Agent worktrees (temporary; separate git repos)
 .claude/worktrees/
