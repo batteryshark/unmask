@@ -128,6 +128,3 @@ documented blind spots in v0.1).
 - **Registry metadata.** npm/PyPI enrichment is offline; confidence reflects static evidence
   without external corroboration.
 
-## License
-
-Apache-2.0 — see [LICENSE](LICENSE).
