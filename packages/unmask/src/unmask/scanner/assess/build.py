@@ -122,6 +122,24 @@ def build_assessment(findings, observations, inv, target_path: str) -> dict:
     review_leads = _review_leads(reach)
     exec_text = _exec_summary(summary, findings, correlations, disposition, reach)
 
+    deep = getattr(inv, "deep_analysis", None) or {}
+    coverage_notes = [_OFFLINE_ENRICHMENT_NOTE, _IMPLEMENTATION_NOTE]
+    if deep.get("enabled"):
+        coverage_notes.append(
+            "Optional Joern deep static analysis: "
+            f"{deep.get('status', 'unknown')} over {len(deep.get('frontends') or [])} "
+            "selected frontend(s); one CPG per frontend, with no cross-language flow claim."
+        )
+        if deep.get("implicitSinkPaths"):
+            coverage_notes.append(
+                f"Joern returned {deep['implicitSinkPaths']} implicit-sink slice(s); these "
+                "were preserved as structural context and not treated as proven data flow."
+            )
+        if deep.get("unresolved"):
+            coverage_notes.append(
+                f"Joern reported {deep['unresolved']} unresolved node(s); see deepStaticAnalysis coverage."
+            )
+
     return {
         "schemaVersion": ASSESSMENT_VERSION,
         "kind": "mcd-assessment",
@@ -143,7 +161,8 @@ def build_assessment(findings, observations, inv, target_path: str) -> dict:
         "coverage": {
             "lensesRun": [MCD_LENS],
             "observationCount": len(obs_dicts),
-            "notes": [_OFFLINE_ENRICHMENT_NOTE, _IMPLEMENTATION_NOTE],
+            "notes": coverage_notes,
+            "deepStaticAnalysis": deep,
         },
         "contract": {"note": _CONTRACT_NOTE},
     }

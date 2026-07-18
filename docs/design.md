@@ -36,6 +36,14 @@ dispose(findings)            -> clear | review | quarantine  (deterministic)
 render(assessment)           -> self-contained report.{html,md,json}
 ```
 
+An optional `--joern` deep-static step sits after broad observation and transform
+rescanning, once the deterministic composition layer has identified an unresolved flow
+question. It invokes Rekit's declarative `joern-slice` profile once per selected source
+frontend and feeds structural evidence back through the existing provenance and
+confidence policy. It does not add findings, replace Tree-sitter coverage, execute target
+code, or claim cross-language flow. Missing runtime coverage and implicit sink selections
+remain explicit report limitations.
+
 **Severity ≠ confidence.** Severity is *how bad this is if real* (fixed by the shape).
 Confidence is *how sure we are* (moved only by policy-derived, auditable rules). A
 critical-severity finding at low confidence is a `review`, not a `quarantine`.

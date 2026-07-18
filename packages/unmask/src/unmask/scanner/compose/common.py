@@ -150,10 +150,32 @@ def _dataflow_status(inv, path, kinds, base_conf, proven_conf):
     """Intra-file dataflow for `path`: proven path of one of `kinds` → raise
     confidence; else base confidence + co-occurrence note. Returns
     (confidence, claim_suffix, extra_disproof, amplifiers, attenuators)."""
-    proven = [p for p in (getattr(inv, "dataflow", None) or {}).get(path, [])
-              if p.get("kind") in kinds]
+    matched = [p for p in (getattr(inv, "dataflow", None) or {}).get(path, [])
+               if p.get("kind") in kinds]
+    # Rekit records ``slice-selected-by-sink`` when a frontend's slice ends at the
+    # value selected by the sink query without exposing an explicit edge to the sink.
+    # Keep that structural context, but do not promote it to a proven flow.
+    implicit = [p for p in matched if p.get("provider") == "joern-slice"
+                and p.get("relation") != "explicit-reaching-def"]
+    proven = [p for p in matched if p not in implicit]
     if proven:
-        p = proven[0]
+        # Prefer the native proof when both layers found the same path; Joern is the
+        # deeper fallback, not a replacement for the broad scanner.
+        p = sorted(proven, key=lambda item: item.get("provider") == "joern-slice")[0]
+        if p.get("provider") == "joern-slice":
+            source = (p.get("source") or {}).get("path") or path
+            sink = (p.get("sink") or {}).get("path") or path
+            locus = f"{source} -> {sink}"
+            return (
+                proven_conf,
+                f" Dataflow: PROVEN by an interprocedural Joern CPG path ({p['shape']}; "
+                f"{locus}) within the `{p.get('frontend')}` frontend. This does not imply "
+                "cross-language flow.",
+                [],
+                [_proof_amp("interprocedural CPG reaching definition",
+                            f"{p['shape']} ({locus}); evidence path {p.get('pathId')}.")],
+                [],
+            )
         if p.get("kind") == "gated-payload":
             return (proven_conf,
                     f" Dataflow: PROVEN ({p['shape']}); the {p['sourceKind']} condition gates a "
@@ -172,6 +194,20 @@ def _dataflow_status(inv, path, kinds, base_conf, proven_conf):
                 "mere co-occurrence.",
                 [], [_proof_amp("proven intra-file taint",
                                 f"{p['shape']} via variable `{p.get('variable', 'value')}` at line {p.get('line')}.")], [])
+    if implicit:
+        p = implicit[0]
+        return (
+            base_conf,
+            f" Dataflow: Joern selected a bounded interprocedural slice for the "
+            f"{p.get('sinkKind')} query, but this frontend did not expose an explicit "
+            "reaching-definition edge to the sink; confidence is not promoted.",
+            ["The Joern slice has an implicit sink selection rather than an explicit "
+             "source-to-sink edge; confirm the sink edge before treating it as proven flow."],
+            [_proof_amp("interprocedural CPG slice",
+                        f"{p['shape']}; evidence path {p.get('pathId')}.")],
+            [_proof_att("implicit sink",
+                        "Joern selected the slice by sink query but did not expose the sink edge.")],
+        )
     return (base_conf,
             " Dataflow: not proven; the steps co-occur in this file, but intra-file taint did not "
             "trace a value from source to sink.",

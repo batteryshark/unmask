@@ -53,6 +53,10 @@ def _cmd_run(args: argparse.Namespace) -> int:
         verify=getattr(args, "verify", False),
         leads=getattr(args, "leads", False),
         confirm_fetch=getattr(args, "confirm_fetch", False),
+        joern_enabled=getattr(args, "joern", False),
+        joern_dispatcher=getattr(args, "joern_dispatcher", None),
+        joern_timeout=getattr(args, "joern_timeout", 900),
+        joern_slice_depth=getattr(args, "joern_slice_depth", 12),
         post_report_qa=args.post_report_qa,
         model=getattr(args, "model", None),
         models=_parse_models(getattr(args, "models", None)),
@@ -231,6 +235,14 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--confirm-fetch", action="store_true",
                      help="gate each remote fetch on a durable question; the run finishes "
                           "needs_input, answer via `unmask questions` + `resume --answer`")
+    run.add_argument("--joern", action="store_true",
+                     help="after broad triage, use Rekit's offline Joern slicer for selected flows")
+    run.add_argument("--joern-dispatcher", default=None,
+                     help="path to the public rekit dispatcher (or set UNMASK_REKIT)")
+    run.add_argument("--joern-timeout", type=int, default=900,
+                     help="per-frontend Joern wall-clock bound in seconds (1-3600)")
+    run.add_argument("--joern-slice-depth", type=int, default=12,
+                     help="Joern data-flow slice depth (1-64)")
     run.add_argument("--json", action="store_true")
     run.set_defaults(func=_cmd_run)
 

@@ -1,0 +1,57 @@
+{
+  "schemaVersion": 1,
+  "id": "unmask-selected-behavior-flow-v1",
+  "findingKind": "unmask-selected-behavior-flow",
+  "sources": [
+    {
+      "id": "network-fetch",
+      "pattern": "urlopen|fetch|download|http\\.(?:get|request)|https\\.(?:get|request)|requests\\.(?:get|post)|axios"
+    },
+    {
+      "id": "decode",
+      "pattern": "atob|b64decode|base64|unhexlify|fromhex"
+    },
+    {
+      "id": "secret-read",
+      "pattern": "process\\.env|os\\.environ|os\\.getenv|getenv\\("
+    },
+    {
+      "id": "sensitive-read",
+      "pattern": "readFile|read_text|read_bytes|open\\(|clipboard|id_rsa|wallet\\.dat|config\\.json"
+    },
+    {
+      "id": "path-enumeration",
+      "pattern": "readdir|listdir|scandir|glob|os\\.walk"
+    },
+    {
+      "id": "target-discovery",
+      "pattern": "networkInterfaces|getifaddrs|ipconfig|ifconfig|arp|netstat|dns\\.(?:resolve|lookup)|nmap"
+    },
+    {
+      "id": "trust-disable",
+      "pattern": "verify\\s*=\\s*false|rejectUnauthorized|CERT_NONE|create_unverified_context|check_hostname|InsecureSkipVerify"
+    }
+  ],
+  "sinks": [
+    {
+      "id": "code-execution",
+      "pattern": "(?:^|[^a-z])(?:exec|eval|system|popen|spawn)(?:$|[^a-z])|child_process|Runtime(?:\\.getRuntime)?\\(\\)\\.exec"
+    },
+    {
+      "id": "file-write",
+      "pattern": "writeFile|write_text|write_bytes|createWriteStream"
+    },
+    {
+      "id": "network-egress",
+      "pattern": "http\\.(?:get|request)|https\\.(?:get|request)|requests\\.(?:get|post|put)|socket\\.(?:send|sendto)|urlopen|axios"
+    },
+    {
+      "id": "encryption",
+      "pattern": "encrypt|createCipher|Fernet|Cipher\\.getInstance"
+    },
+    {
+      "id": "file-delete",
+      "pattern": "unlink|remove|rmdir|rmSync"
+    }
+  ]
+}

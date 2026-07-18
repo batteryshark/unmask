@@ -54,6 +54,13 @@ class MCDConfig:
     # and resumes. Never a blocking wait.
     confirm_fetch: bool = False
 
+    # Optional post-triage CPG evidence. The dispatcher is Rekit's public CLI;
+    # analysis remains offline and unavailable runtimes never fail the broad scan.
+    joern_enabled: bool = False
+    joern_dispatcher: str | None = None
+    joern_timeout: int = 900
+    joern_slice_depth: int = 12
+
     tree_enabled: bool = True
     tree_max_depth: int = 4
     tree_max_entries: int = 2000
